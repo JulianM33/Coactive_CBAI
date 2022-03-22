@@ -5,7 +5,7 @@ from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
 from matrx.agents.agent_utils.navigator import Navigator
 from matrx.agents.agent_utils.state_tracker import StateTracker
-from matrx.actions.door_actions import OpenDoorAction
+from matrx.actions.door_actions import OpenDoorAction, CloseDoorAction
 from matrx.actions.object_actions import GrabObject, DropObject
 from matrx.messages.message import Message
 
@@ -35,7 +35,11 @@ class Phase(enum.Enum):
     PLAN_PATH_TO_DROP_OBJECT = 8,
     FOLLOW_PATH_TO_DROP_OBJECT = 9,
     DROP_OBJECT = 10,
-    SEARCH_ROOM = 11
+    INITIATE_ROOM_SEARCH = 11,
+    SEARCH_ROOM = 12,
+    FOUND_BLOCK = 13,
+    EXIT_ROOM = 14,
+    CLOSE_DOOR = 15
 
 class Team40Agent(BW4TBrain):
 
@@ -114,9 +118,8 @@ class Team40Agent(BW4TBrain):
 
             if Phase.DROP_OBJECT == self._phase:
                 self._phase = Phase.DECIDE_ACTION
-                self._sendMessage('Dropped goal block ' + self._carrying[0]['visualization']
-                                  + ' at location ' + self._loc_goal)
-
+                # self._sendMessage('Dropped goal block ' + self._carrying[0]['visualization'] + ' at location ' + self._loc_goal)
+                self._activeObjectives.pop(0)
                 return DropObject.__name__, {'object_id': self._carrying[0]['obj_id']}
 
             if Phase.PLAN_PATH_TO_CLOSED_DOOR == self._phase:
@@ -131,7 +134,7 @@ class Team40Agent(BW4TBrain):
                 self._door = random.choice(closedDoors)
                 doorLoc = self._door['location']
                 # Location in front of door is south from door
-                doorLoc = doorLoc[0],doorLoc[1]+1
+                doorLoc = doorLoc[0], doorLoc[1]+1
                 # Send message of current action
                 self._sendMessage('Moving to ' + self._door['room_name'], agent_name)
                 self._navigator.add_waypoints([doorLoc])
@@ -146,13 +149,57 @@ class Team40Agent(BW4TBrain):
                 self._phase = Phase.OPEN_DOOR
 
             if Phase.OPEN_DOOR == self._phase:
-                self._phase = Phase.SEARCH_ROOM
+                self._phase = Phase.INITIATE_ROOM_SEARCH
                 # Open door
                 self._sendMessage('Opening door of ' + self._door['room_name'], agent_name)
                 return OpenDoorAction.__name__, {'object_id': self._door['obj_id']}
 
+            if Phase.INITIATE_ROOM_SEARCH == self._phase:
+                self._navigator.reset_full()
+                doorLoc = self._door['location']
+                waypoints = [(doorLoc[0], doorLoc[1]-1),
+                             (doorLoc[0], doorLoc[1]-2),
+                             (doorLoc[0]-1, doorLoc[1]-2),
+                             (doorLoc[0]-1, doorLoc[1]-1)]
+                self._navigator.add_waypoints(waypoints)
+                self._phase = Phase.SEARCH_ROOM
+
             if Phase.SEARCH_ROOM == self._phase:
+                self._state_tracker.update(state)
+
+                nearby_objects = [obj for obj in state.values()
+                                  if 'is_collectable' in obj and obj['is_collectable']]
+                nby_obj_ind = self._indexObjEquals(nearby_objects, self._activeObjectives[0])
+                if nby_obj_ind != -1:
+                    self._navigator.reset_full()
+                    self._searched_obj = nearby_objects[nby_obj_ind]
+                    self._navigator.add_waypoint(self._searched_obj['location'])
+                    self._phase = Phase.FOUND_BLOCK
+                else:
+                    action = self._navigator.get_move_action(self._state_tracker)
+                    if action is not None:
+                        return action, {}
+                    self._phase = Phase.EXIT_ROOM
+
+            if Phase.FOUND_BLOCK == self._phase:
+                self._state_tracker.update(state)
+
+                action = self._navigator.get_move_action(self._state_tracker)
+                if action is not None:
+                    return action, {}
+                self._phase = Phase.EXIT_ROOM
+                return GrabObject.__name__, {'object_id': self._searched_obj['obj_id']}
+
+            if Phase.EXIT_ROOM == self._phase:
+                self._navigator.reset_full()
+                doorLoc = self._door['location']
+                self._navigator.add_waypoint((doorLoc[0], doorLoc[1] + 1))
+                self._state_tracker.update(state)
+                action = self._navigator.get_move_action(self._state_tracker)
+                if action is not None:
+                    return action, {}
                 self._phase = Phase.DECIDE_ACTION
+                return CloseDoorAction.__name__, {'object_id': self._door['obj_id']}
 
     def _sendMessage(self, mssg, sender):
         '''
@@ -190,9 +237,17 @@ class Team40Agent(BW4TBrain):
 
     def _indexObjEquals(self, objList, obj):
         for i in range(len(objList)):
-            o = objList[i]
-            ov = o['visualization']
-            objv = obj['visualization']
 
-            if ov['shape'] == objv['shape'] and ov['colour'] != objv['colour']:
+            if self._objEquals(objList[i], obj):
                 return i
+        return -1
+
+    def _objEquals(self, obj1, obj2):
+        ov1 = obj1['visualization']
+        ov2 = obj2['visualization']
+
+        if ov1['shape'] != ov2['shape']:
+            return False
+        if ov1['colour'] != ov2['colour']:
+            return False
+        return True
