@@ -118,7 +118,9 @@ class Team40Agent(BW4TBrain):
 
             if Phase.DROP_OBJECT == self._phase:
                 self._phase = Phase.DECIDE_ACTION
-                # self._sendMessage('Dropped goal block ' + self._carrying[0]['visualization'] + ' at location ' + self._loc_goal)
+                self._sendMessage('Dropped goal block ' + str(self._carrying[0]['visualization'])
+                                  + ' at location ' + str(self._loc_goal),
+                                  agent_name)
                 self._activeObjectives.pop(0)
                 return DropObject.__name__, {'object_id': self._carrying[0]['obj_id']}
 
@@ -162,6 +164,7 @@ class Team40Agent(BW4TBrain):
                              (doorLoc[0]-1, doorLoc[1]-2),
                              (doorLoc[0]-1, doorLoc[1]-1)]
                 self._navigator.add_waypoints(waypoints)
+                self._sendMessage('Searching through ' + self._door['room_name'], agent_name)
                 self._phase = Phase.SEARCH_ROOM
 
             if Phase.SEARCH_ROOM == self._phase:
@@ -175,6 +178,9 @@ class Team40Agent(BW4TBrain):
                     self._searched_obj = nearby_objects[nby_obj_ind]
                     self._navigator.add_waypoint(self._searched_obj['location'])
                     self._phase = Phase.FOUND_BLOCK
+                    self._sendMessage('Found goal block ' + str(self._searched_obj['visualization'])
+                                      + ' at location ' + str(self._searched_obj['location']),
+                                      agent_name)
                 else:
                     action = self._navigator.get_move_action(self._state_tracker)
                     if action is not None:
@@ -188,6 +194,9 @@ class Team40Agent(BW4TBrain):
                 if action is not None:
                     return action, {}
                 self._phase = Phase.EXIT_ROOM
+                self._sendMessage('Picking up goal block ' + str(self._searched_obj['visualization'])
+                                  + ' at location ' + str(self._searched_obj['location']),
+                                  agent_name)
                 return GrabObject.__name__, {'object_id': self._searched_obj['obj_id']}
 
             if Phase.EXIT_ROOM == self._phase:
