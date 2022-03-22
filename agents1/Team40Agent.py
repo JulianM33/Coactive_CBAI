@@ -165,6 +165,7 @@ class Team40Agent(BW4TBrain):
                              (doorLoc[0]-1, doorLoc[1]-1)]
                 self._navigator.add_waypoints(waypoints)
                 self._sendMessage('Searching through ' + self._door['room_name'], agent_name)
+                self._roomIsEmpty = True
                 self._phase = Phase.SEARCH_ROOM
 
             if Phase.SEARCH_ROOM == self._phase:
@@ -172,6 +173,8 @@ class Team40Agent(BW4TBrain):
 
                 nearby_objects = [obj for obj in state.values()
                                   if 'is_collectable' in obj and obj['is_collectable']]
+                if len(nearby_objects) != 0:
+                    self._roomIsEmpty = False
                 nby_obj_ind = self._indexObjEquals(nearby_objects, self._activeObjectives[0])
                 if nby_obj_ind != -1:
                     self._navigator.reset_full()
@@ -208,7 +211,9 @@ class Team40Agent(BW4TBrain):
                 if action is not None:
                     return action, {}
                 self._phase = Phase.DECIDE_ACTION
-                return CloseDoorAction.__name__, {'object_id': self._door['obj_id']}
+
+                if not self._roomIsEmpty:
+                    return CloseDoorAction.__name__, {'object_id': self._door['obj_id']}
 
     def _sendMessage(self, mssg, sender):
         '''
