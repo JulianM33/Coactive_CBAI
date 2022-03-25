@@ -9,74 +9,102 @@ from matrx.actions.door_actions import OpenDoorAction, CloseDoorAction
 from matrx.actions.object_actions import GrabObject, DropObject
 from matrx.messages.message import Message
 
-# Procedure
-# 1. check objectives
-#       - announce objectives upon reaching them
-#       - if a highly trustworthy agent announces, cancel route and add objectives to active list
-# 2. plan room to check
-#       - remove from interest the destination of a trustworthy agent's destination
-#       - announce which room to check
-# 3. check room
-#       - if found block -> step 4
-#       - if found multiple blocks -> announce
-#       - if no block -> step 2
-# 4. drop block
-#       -
-
-
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR = 1,
     FOLLOW_PATH_TO_CLOSED_DOOR = 2,
     OPEN_DOOR = 3,
-    PLAN_PATH_TO_OBJECTIVE1 = 4,
-    PLAN_PATH_TO_OBJECTIVE2 = 5,
-    PLAN_PATH_TO_OBJECTIVE3 = 6,
-    DECIDE_ACTION = 7,
-    PLAN_PATH_TO_DROP_OBJECT = 8,
-    FOLLOW_PATH_TO_DROP_OBJECT = 9,
-    DROP_OBJECT = 10,
-    INITIATE_ROOM_SEARCH = 11,
-    SEARCH_ROOM = 12,
-    FOUND_BLOCK = 13,
-    EXIT_ROOM = 14,
-    CLOSE_DOOR = 15
+    DECIDE_ACTION = 4,
+    PLAN_PATH_TO_DROP_OBJECT = 5,
+    FOLLOW_PATH_TO_DROP_OBJECT = 6,
+    DROP_OBJECT = 7,
+    INITIATE_ROOM_SEARCH = 8,
+    SEARCH_ROOM = 9,
+    FOUND_BLOCK = 10,
+    EXIT_ROOM = 11
 
 class Team40Agent(BW4TBrain):
 
-    def __init__(self, settings:Dict[str,object]):
+    def __init__(self, settings: Dict[str, object]):
         super().__init__(settings)
         self._isFirstAction = True
         self._phase = Phase.DECIDE_ACTION
         self._teamMembers = []
         self._activeObjectives = []
+        self._state_tracker = None
+        self._navigator = None
+
+        self._oldMsg = {}
+        self._latestMsg = {}
+        self._trustPerAgent = {}
+
+        self._doNothing = False
+        if 'do_nothing' in settings:
+            if settings['do_nothing']:
+                self._doNothing = True
 
     def initialize(self):
         super().initialize()
         self._state_tracker = StateTracker(agent_id=self.agent_id)
-        self._navigator = Navigator(agent_id=self.agent_id, action_set=self.action_set, algorithm=Navigator.A_STAR_ALGORITHM)
+        self._navigator = Navigator(agent_id=self.agent_id, action_set=self.action_set,
+                                    algorithm=Navigator.A_STAR_ALGORITHM)
+
+    def _sendMessage(self, mssg, sender):
+        '''
+        Enable sending messages in one line of code
+        '''
+        msg = Message(content=mssg, from_id=sender)
+        if msg.content not in self.received_messages:
+            self.send_message(msg)
+
+    def _processMessages(self, teamMembers):
+        self._oldMsg = self._latestMsg
+        for mssg in self.received_messages:
+            for member in teamMembers:
+                if mssg.from_id == member:
+                    self._latestMsg[member] = mssg.content
+
+    def _trustBlief(self, member, received):
+        '''
+        Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
+        '''
+        # You can change the default value to your preference
+        default = 0.5
+        trustBeliefs = {}
+        for member in received.keys():
+            trustBeliefs[member] = default
+        for member in received.keys():
+            for message in received[member]:
+                if 'Found' in message and 'colour' not in message:
+                    trustBeliefs[member]-=0.1
+                    break
+        return trustBeliefs
 
     def filter_bw4t_observations(self, state):
         return state
 
-    def decide_on_bw4t_action(self, state:State):
+    def decide_on_bw4t_action(self, state: State):
         agent_name = state[self.agent_id]['obj_id']
-
-        # Add team members
-        for member in state['World']['team_members']:
-            if member != agent_name and member not in self._teamMembers:
-                self._teamMembers.append(member)
-
-        # Process messages from team members
-        receivedMessages = self._processMessages(self._teamMembers)
-        # Update trust beliefs for team members
-        self._trustBlief(self._teamMembers, receivedMessages)
 
         # get goal objectives initially
         if self._isFirstAction:
+            # Add team members
+            for member in state['World']['team_members']:
+                if member != agent_name and member not in self._teamMembers:
+                    self._teamMembers.append(member)
+
+            for member in self._teamMembers:
+                # default trust values to 0.5
+                self._trustPerAgent[member] = 0.5
             self._activeObjectives = [goal for goal in state.values()
                                       if 'is_goal_block' in goal and goal['is_goal_block']]
-
         self._isFirstAction = False
+
+        # Process messages from team members
+        self._processMessages(self._teamMembers)
+
+        if self._doNothing:
+            print(self._latestMsg)
+            return None, {}
 
         while True:
             if Phase.DECIDE_ACTION == self._phase:
@@ -165,7 +193,7 @@ class Team40Agent(BW4TBrain):
                              (doorLoc[0]-1, doorLoc[1]-1)]
                 self._navigator.add_waypoints(waypoints)
                 self._sendMessage('Searching through ' + self._door['room_name'], agent_name)
-                self._roomIsEmpty = True
+                self._roomIsUseless = True
                 self._phase = Phase.SEARCH_ROOM
 
             if Phase.SEARCH_ROOM == self._phase:
@@ -173,9 +201,11 @@ class Team40Agent(BW4TBrain):
 
                 nearby_objects = [obj for obj in state.values()
                                   if 'is_collectable' in obj and obj['is_collectable']]
-                if len(nearby_objects) != 0:
-                    self._roomIsEmpty = False
                 nby_obj_ind = self._indexObjEquals(nearby_objects, self._activeObjectives[0])
+
+                if self._hasCommon(nearby_objects, self._activeObjectives):
+                    self._roomIsUseless = False
+
                 if nby_obj_ind != -1:
                     self._navigator.reset_full()
                     self._searched_obj = nearby_objects[nby_obj_ind]
@@ -212,42 +242,8 @@ class Team40Agent(BW4TBrain):
                     return action, {}
                 self._phase = Phase.DECIDE_ACTION
 
-                if not self._roomIsEmpty:
+                if not self._roomIsUseless:
                     return CloseDoorAction.__name__, {'object_id': self._door['obj_id']}
-
-    def _sendMessage(self, mssg, sender):
-        '''
-        Enable sending messages in one line of code
-        '''
-        msg = Message(content=mssg, from_id=sender)
-        if msg.content not in self.received_messages:
-            self.send_message(msg)
-
-    def _processMessages(self, teamMembers):
-        '''
-        Process incoming messages and create a dictionary with received messages from each team member.
-        '''
-        receivedMessages = {}
-        for member in teamMembers:
-            receivedMessages[member] = []
-        for mssg in self.received_messages:
-            for member in teamMembers:
-                if mssg.from_id == member:
-                    receivedMessages[member].append(mssg.content)       
-        return receivedMessages
-
-    def _trustBlief(self, member, received):
-        # You can change the default value to your preference
-        default = 0.5
-        trustBeliefs = {}
-        for member in received.keys():
-            trustBeliefs[member] = default
-        for member in received.keys():
-            for message in received[member]:
-                if 'Found' in message and 'colour' not in message:
-                    trustBeliefs[member] -= 0.1
-                    break
-        return trustBeliefs
 
     def _indexObjEquals(self, objList, obj):
         for i in range(len(objList)):
@@ -255,6 +251,13 @@ class Team40Agent(BW4TBrain):
             if self._objEquals(objList[i], obj):
                 return i
         return -1
+
+    def _hasCommon(self, li1, li2):
+        for obj1 in li1:
+            for obj2 in li2:
+                if self._objEquals(obj1, obj2):
+                    return True
+        return False
 
     def _objEquals(self, obj1, obj2):
         ov1 = obj1['visualization']
