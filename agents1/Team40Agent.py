@@ -1,6 +1,6 @@
 
 from typing import final, List, Dict, Final
-import enum, random
+import enum, random, copy
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
 from matrx.agents.agent_utils.navigator import Navigator
@@ -57,27 +57,24 @@ class Team40Agent(BW4TBrain):
             self.send_message(msg)
 
     def _processMessages(self, teamMembers):
-        self._oldMsg = self._latestMsg
-        for mssg in self.received_messages:
-            for member in teamMembers:
+        self._oldMsg = copy.deepcopy(self._latestMsg)
+
+        for member in teamMembers:
+            for mssg in self.received_messages:
                 if mssg.from_id == member:
                     self._latestMsg[member] = mssg.content
+            if member not in self._oldMsg:
+                self._oldMsg[member] = None
+            if member not in self._latestMsg:
+                self._latestMsg[member] = None
 
-    def _trustBlief(self, member, received):
-        '''
-        Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
-        '''
-        # You can change the default value to your preference
-        default = 0.5
-        trustBeliefs = {}
-        for member in received.keys():
-            trustBeliefs[member] = default
+    """def _trustBlief(self, member, received):
         for member in received.keys():
             for message in received[member]:
                 if 'Found' in message and 'colour' not in message:
                     trustBeliefs[member]-=0.1
                     break
-        return trustBeliefs
+        return trustBeliefs"""
 
     def filter_bw4t_observations(self, state):
         return state
@@ -101,9 +98,15 @@ class Team40Agent(BW4TBrain):
 
         # Process messages from team members
         self._processMessages(self._teamMembers)
+        newMessages = {}
+        for member in self._teamMembers:
+            if self._latestMsg[member] == self._oldMsg[member]:
+                newMessages[member] = None
+            else:
+                newMessages[member] = self._latestMsg
 
         if self._doNothing:
-            print(self._latestMsg)
+            print(newMessages)
             return None, {}
 
         while True:
