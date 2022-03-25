@@ -11,7 +11,7 @@ from matrx.messages.message import Message
 
 class Phase(enum.Enum):
     PLAN_PATH_TO_CLOSED_DOOR = 1,
-    FOLLOW_PATH_TO_CLOSED_DOOR = 2,
+    FOLLOW_PATH_TO_ROOM = 2,
     OPEN_DOOR = 3,
     DECIDE_ACTION = 4,
     PLAN_PATH_TO_DROP_OBJECT = 5,
@@ -33,6 +33,7 @@ class Team40Agent(BW4TBrain):
         self._state_tracker = None
         self._navigator = None
 
+        self._msgHist = {}
         self._oldMsg = {}
         self._latestMsg = {}
         self._trustPerAgent = {}
@@ -63,18 +64,53 @@ class Team40Agent(BW4TBrain):
             for mssg in self.received_messages:
                 if mssg.from_id == member:
                     self._latestMsg[member] = mssg.content
+
+                    if mssg.content not in self._msgHist:
+                        self._msgHist[member].append(mssg.content)
+
             if member not in self._oldMsg:
                 self._oldMsg[member] = None
             if member not in self._latestMsg:
                 self._latestMsg[member] = None
+            if member not in self._msgHist:
+                self._msgHist[member] = []
 
-    """def _trustBlief(self, member, received):
-        for member in received.keys():
-            for message in received[member]:
-                if 'Found' in message and 'colour' not in message:
-                    trustBeliefs[member]-=0.1
-                    break
-        return trustBeliefs"""
+    def _updateTrusts(self, newestMsg):
+        for member in newestMsg.keys():
+            # Increase member trust by default
+            self._updateTrustBy(member, 0.002)
+
+            message = newestMsg[member]
+            if message is None:
+                continue
+
+            # Colorblind agent
+            if ('Found' in message or 'Picking' in message) and 'colour' not in message:
+                self._updateTrustBy(member, -0.1)
+                continue
+
+            # Liar agent
+            if 'Found' in message and ('Moving' not in self._msgHist[member]
+                                       or 'Searching' not in self._msgHist[member]):
+                self._updateTrustBy(member, -0.2)
+                continue
+            if 'Searching' in message and 'Moving' not in self._msgHist[member]:
+                self._updateTrustBy(member, -0.2)
+                continue
+            if 'Dropped' in message and 'Picking' not in self._msgHist[member]:
+                self._updateTrustBy(member, -0.2)
+                continue
+
+    def _updateTrustBy(self, member, amount):
+        current = self._trustPerAgent[member]
+        if amount == 0:
+            return
+        elif current + amount > 1:
+            self._trustPerAgent[member] = 1
+        elif current + amount < 0:
+            self._trustPerAgent[member] = 0
+        else:
+            self._trustPerAgent[member] += amount
 
     def filter_bw4t_observations(self, state):
         return state
@@ -82,7 +118,7 @@ class Team40Agent(BW4TBrain):
     def decide_on_bw4t_action(self, state: State):
         agent_name = state[self.agent_id]['obj_id']
 
-        # get goal objectives initially
+        # Get goal objectives initially
         if self._isFirstAction:
             # Add team members
             for member in state['World']['team_members']:
@@ -104,30 +140,32 @@ class Team40Agent(BW4TBrain):
                 newMessages[member] = None
             else:
                 newMessages[member] = self._latestMsg
+        # Update member trusts based on newest messages
+        self._updateTrusts(newMessages)
 
         if self._doNothing:
-            print(newMessages)
+            print(self._trustPerAgent)
             return None, {}
 
         while True:
             if Phase.DECIDE_ACTION == self._phase:
                 self._carrying = state[self.agent_id]['is_carrying']
 
-                # carrying something, go drop it
+                # Carrying something, go drop it
                 if len(self._carrying) != 0:
                     ind = self._indexObjEquals(self._activeObjectives, self._carrying[0])
 
-                    # holding a useless block
+                    # Holding a useless block
                     if ind == -1:
                         return None, {}
                     else:
                         self._phase = Phase.PLAN_PATH_TO_DROP_OBJECT
 
-                # still have to look for goal objects
+                # Still have to look for goal objects
                 elif len(self._activeObjectives) != 0:
                     self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
 
-                # no job left to do
+                # No job left to do
                 else:
                     return None, {}
 
@@ -171,14 +209,14 @@ class Team40Agent(BW4TBrain):
                 # Send message of current action
                 self._sendMessage('Moving to ' + self._door['room_name'], agent_name)
                 self._navigator.add_waypoints([doorLoc])
-                self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
+                self._phase = Phase.FOLLOW_PATH_TO_ROOM
 
-            if Phase.FOLLOW_PATH_TO_CLOSED_DOOR == self._phase:
+            if Phase.FOLLOW_PATH_TO_ROOM == self._phase:
                 self._state_tracker.update(state)
                 # Follow path to door
                 action = self._navigator.get_move_action(self._state_tracker)
                 if action is not None:
-                    return action, {}   
+                    return action, {}
                 self._phase = Phase.OPEN_DOOR
 
             if Phase.OPEN_DOOR == self._phase:
