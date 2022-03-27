@@ -36,20 +36,38 @@ class Team40Agent(BW4TBrain):
         self._msgHist = {}
         self._oldMsg = {}
         self._latestMsg = {}
-        self._trustPerAgent = {}
+        self._trustPerMember = {}
 
         self._memberObjects = {}
 
         self._doNothing = False
-        if 'do_nothing' in settings:
-            if settings['do_nothing']:
-                self._doNothing = True
+        if 'do_nothing' in settings and settings['do_nothing']:
+            self._doNothing = True
+
+        self._doLog = False
+        if 'do_log' in settings and settings['do_log']:
+            self._doLog = True
 
     def initialize(self):
         super().initialize()
         self._state_tracker = StateTracker(agent_id=self.agent_id)
         self._navigator = Navigator(agent_id=self.agent_id, action_set=self.action_set,
                                     algorithm=Navigator.A_STAR_ALGORITHM)
+
+    def _removePrefix(self, pre, message):
+        if message.startswith(pre):
+            return message[len(pre):]
+
+    def _parseLocation(self, message):
+        ind = message.index('at location')
+        return message[ind + len('at location '):]
+
+    def _parseBlockVisual(self, message):
+        ind = message.index('{')
+        tempMsg = message[ind:]
+        for charInd in range(len(tempMsg)):
+            if tempMsg[charInd] == '}':
+                return tempMsg[:charInd + 1]
 
     def _sendMessage(self, mssg, sender):
         '''
@@ -81,58 +99,109 @@ class Team40Agent(BW4TBrain):
         for member in newestMsg.keys():
             # Decrease member trust by default
             self._updateTrustBy(member, -0.002)
+            if self._trustPerMember[member] < 0:
+                self._trustPerMember[member] = 0
 
             message = newestMsg[member]
             if message is None:
                 continue
 
             # Colorblind agent
-            if 'colour' not in message and ('Found' in message or 'Picking' in message or 'Dropped' in message):
+            if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
                 self._updateTrustBy(member, -0.1)
                 continue
 
             # Liar agent - picking/dropping objects
-            """if 'Picking up goal block {' in message:
-                tempMsg = message[len('Picking up goal block '):]
-                for charInd in len(tempMsg):
-                    if len"""
-
+            if 'Picking up goal block {' in message:
+                self._memberObjects[member].append(self._parseBlockVisual(message))
+            if len(self._memberObjects[member]) > 2:
+                self._updateTrustBy(member, -0.2)
+                continue
+            if 'Dropped goal block {' in message:
+                if len(self._memberObjects[member]) <= 0:
+                    self._updateTrustBy(member, -0.2)
+                    continue
+                vis = self._parseBlockVisual(message)
+                found = False
+                for indObj in range(len(self._memberObjects[member])):
+                    if self._memberObjects[member][indObj] == vis:
+                        self._memberObjects[member].pop(indObj)
+                        found = True
+                if not found:
+                    self._updateTrustBy(member, -0.2)
+                    continue
 
             # Liar agent - detect messages in impossible order
-            if 'Opening' in message and 'Moving' not in self._msgHist[member]:
+            if 'Opening door of' in message and \
+                    ('Moving to ' + self._removePrefix('Opening door of ', message)) not in self._msgHist[member]:
+                self._print(member + ' lied')
                 self._updateTrustBy(member, -0.2)
                 continue
-            if 'Searching' in message and 'Moving' not in self._msgHist[member]:
+            if 'Searching through' in message and \
+                    ('Moving to ' + self._removePrefix('Searching through ', message)) not in self._msgHist[member]:
+                self._print(member + ' lied')
                 self._updateTrustBy(member, -0.2)
                 continue
-            if 'Found' in message and ('Moving' not in self._msgHist[member]
-                                       or 'Searching' not in self._msgHist[member]):
+            if 'Found goal' in message and \
+                    ('Searching through ' + self._parseLocation(message)) not in self._msgHist[member]:
+                self._print(member + ' lied')
                 self._updateTrustBy(member, -0.2)
                 continue
-            if 'Picking' in message and ('Moving' not in self._msgHist[member]
-                                         or 'Searching' not in self._msgHist[member]):
+            if 'Picking' in message and \
+                    ('Moving' not in self._msgHist[member] or 'Searching' not in self._msgHist[member]):
+                self._print(member + ' lied')
                 self._updateTrustBy(member, -0.2)
                 continue
             if 'Dropped' in message and 'Picking' not in self._msgHist[member]:
+                self._print(member + ' lied')
                 self._updateTrustBy(member, -0.2)
                 continue
 
-            # Lazy agent - detect unexpected order of messages
+            # Check order of messages
             oldMsg = self._oldMsg[member]
             if oldMsg is not None and oldMsg != message:
+
+                # Lazy agent - not searching room after opening
                 if 'Opening' in oldMsg and 'Searching' not in message:
                     self._updateTrustBy(member, -0.1)
+                    continue
+                # Lazy agent - not picking up although not carrying anything
+                if 'Found' in oldMsg and 'Picking' not in message:
+                    if 'Picking' not in self._msgHist[member]:
+                        self._updateTrustBy(member, -0.1)
+                        continue
+
+                # Normal cases - Check if room is consistent
+                if 'Moving to' in oldMsg and 'Opening door of' in message:
+                    if self._removePrefix('Moving to ', oldMsg) == self._removePrefix('Opening door of ', message):
+                        self._updateTrustBy(member, 0.1)
+                        continue
+                if 'Opening door of' in oldMsg and 'Searching through' in message:
+                    if self._removePrefix('Opening door of ', oldMsg) == \
+                            self._removePrefix('Searching through ', message):
+                        self._updateTrustBy(member, 0.1)
+                        continue
+                if 'Found goal block' in oldMsg and 'Picking up goal block' in message:
+                    if self._parseLocation(oldMsg) == self._parseLocation(message):
+                        if self._parseBlockVisual(oldMsg) == self._parseBlockVisual(message):
+                            self._updateTrustBy(member, 0.2)
+                            continue
+                if 'Picking up goal block' in oldMsg and 'Dropped goal block' in message:
+                    if self._parseBlockVisual(oldMsg) == self._parseBlockVisual(message):
+                        self._updateTrustBy(member, 0.2)
+                if 'Dropped goal block' in oldMsg and 'Moving to' in message:
+                    self._updateTrustBy(member, 0.1)
 
     def _updateTrustBy(self, member, amount):
-        current = self._trustPerAgent[member]
+        current = self._trustPerMember[member]
         if amount == 0:
             return
         elif current + amount > 1:
-            self._trustPerAgent[member] = 1
+            self._trustPerMember[member] = 1
         elif current + amount < 0:
-            self._trustPerAgent[member] = 0
+            self._trustPerMember[member] = 0
         else:
-            self._trustPerAgent[member] += amount
+            self._trustPerMember[member] += amount
 
     def filter_bw4t_observations(self, state):
         return state
@@ -149,7 +218,10 @@ class Team40Agent(BW4TBrain):
 
             for member in self._teamMembers:
                 # Default trust values to 0.5
-                self._trustPerAgent[member] = 0.5
+                self._trustPerMember[member] = 0.5
+
+                # Initialize object list per member
+                self._memberObjects[member] = []
 
             self._activeObjectives = [goal for goal in state.values()
                                       if 'is_goal_block' in goal and goal['is_goal_block']]
@@ -167,7 +239,7 @@ class Team40Agent(BW4TBrain):
         self._updateTrusts(newMessages)
 
         if self._doNothing:
-            print(self._oldMsg, newMessages)
+            print(self._memberObjects)
             return None, {}
 
         while True:
@@ -210,18 +282,15 @@ class Team40Agent(BW4TBrain):
 
             if Phase.DROP_OBJECT == self._phase:
                 self._phase = Phase.DECIDE_ACTION
-                self._sendMessage('Dropped goal block ' + str(self._carrying[0]['visualization'])
-                                  + ' at location ' + str(self._loc_goal),
-                                  agent_name)
-                self._activeObjectives.pop(0)
+                self._sendMessage('Dropped goal block ' + str(self._carrying[0]['visualization']) +
+                                  ' at location ' + str(self._loc_goal), agent_name)
+                self._activeObjectives.pop(self._indexObjEquals(self._activeObjectives, self._carrying[0]))
                 return DropObject.__name__, {'object_id': self._carrying[0]['obj_id']}
 
             if Phase.PLAN_PATH_TO_ROOM == self._phase:
                 self._navigator.reset_full()
-                closedDoors = [door for door in state.values()
-                               if 'class_inheritance' in door
-                               and 'Door' in door['class_inheritance']
-                               and not door['is_open']]
+                closedDoors = [door for door in state.values() if 'class_inheritance' in door
+                               and 'Door' in door['class_inheritance'] and not door['is_open']]
                 if len(closedDoors) == 0:
                     return None, {}
                 # Randomly pick a closed door
@@ -251,10 +320,7 @@ class Team40Agent(BW4TBrain):
             if Phase.INITIATE_ROOM_SEARCH == self._phase:
                 self._navigator.reset_full()
                 doorLoc = self._door['location']
-                waypoints = [(doorLoc[0], doorLoc[1]-1),
-                             (doorLoc[0], doorLoc[1]-2),
-                             (doorLoc[0]-1, doorLoc[1]-2),
-                             (doorLoc[0]-1, doorLoc[1]-1)]
+                waypoints = [(doorLoc[0], doorLoc[1]-1), (doorLoc[0], doorLoc[1]-2), (doorLoc[0]-1, doorLoc[1]-2), (doorLoc[0]-1, doorLoc[1]-1)]
                 self._navigator.add_waypoints(waypoints)
                 self._sendMessage('Searching through ' + self._door['room_name'], agent_name)
                 self._roomIsUseless = True
@@ -263,16 +329,15 @@ class Team40Agent(BW4TBrain):
             if Phase.SEARCH_ROOM == self._phase:
                 self._state_tracker.update(state)
 
-                nearby_objects = [obj for obj in state.values()
-                                  if 'is_collectable' in obj and obj['is_collectable']]
-                nby_obj_ind = self._indexObjEquals(nearby_objects, self._activeObjectives[0])
+                nearby_objects = [obj for obj in state.values() if 'is_collectable' in obj and obj['is_collectable']]
+                objInd = self._indexObjEquals(nearby_objects, self._activeObjectives[0])
 
                 if self._hasCommon(nearby_objects, self._activeObjectives):
                     self._roomIsUseless = False
 
-                if nby_obj_ind != -1:
+                if objInd != -1:
                     self._navigator.reset_full()
-                    self._searched_obj = nearby_objects[nby_obj_ind]
+                    self._searched_obj = nearby_objects[objInd]
                     self._navigator.add_waypoint(self._searched_obj['location'])
                     self._phase = Phase.FOUND_BLOCK
                     self._sendMessage('Found goal block ' + str(self._searched_obj['visualization'])
@@ -309,12 +374,18 @@ class Team40Agent(BW4TBrain):
                 if not self._roomIsUseless:
                     return CloseDoorAction.__name__, {'object_id': self._door['obj_id']}
 
-    def _indexObjEquals(self, objList1, objList2):
+    def _indexObjEquals(self, objList, obj):
+        for i in range(len(objList)):
+            if self._objEquals(objList[i], obj):
+                return i
+        return -1
+
+    def _indexObjsEquals(self, objList1, objList2):
         for i in range(len(objList1)):
             for j in range(len(objList2)):
-                if self._objEquals(objList1[i], objList2):
+                if self._objEquals(objList1[i], objList2[j]):
                     return i, j
-        return -1
+        return -1, -1
 
     def _hasCommon(self, li1, li2):
         for obj1 in li1:
@@ -332,3 +403,7 @@ class Team40Agent(BW4TBrain):
         if ov1['colour'] != ov2['colour']:
             return False
         return True
+
+    def _print(self, msg):
+        if self._doLog:
+            print(msg)
