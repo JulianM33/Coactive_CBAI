@@ -10,7 +10,7 @@ from matrx.actions.object_actions import GrabObject, DropObject
 from matrx.messages.message import Message
 
 class Phase(enum.Enum):
-    PLAN_PATH_TO_CLOSED_DOOR = 1,
+    PLAN_PATH_TO_ROOM = 1,
     FOLLOW_PATH_TO_ROOM = 2,
     OPEN_DOOR = 3,
     DECIDE_ACTION = 4,
@@ -37,6 +37,8 @@ class Team40Agent(BW4TBrain):
         self._oldMsg = {}
         self._latestMsg = {}
         self._trustPerAgent = {}
+
+        self._memberObjects = {}
 
         self._doNothing = False
         if 'do_nothing' in settings:
@@ -77,29 +79,49 @@ class Team40Agent(BW4TBrain):
 
     def _updateTrusts(self, newestMsg):
         for member in newestMsg.keys():
-            # Increase member trust by default
-            self._updateTrustBy(member, 0.002)
+            # Decrease member trust by default
+            self._updateTrustBy(member, -0.002)
 
             message = newestMsg[member]
             if message is None:
                 continue
 
             # Colorblind agent
-            if ('Found' in message or 'Picking' in message) and 'colour' not in message:
+            if 'colour' not in message and ('Found' in message or 'Picking' in message or 'Dropped' in message):
                 self._updateTrustBy(member, -0.1)
                 continue
 
-            # Liar agent
-            if 'Found' in message and ('Moving' not in self._msgHist[member]
-                                       or 'Searching' not in self._msgHist[member]):
+            # Liar agent - picking/dropping objects
+            """if 'Picking up goal block {' in message:
+                tempMsg = message[len('Picking up goal block '):]
+                for charInd in len(tempMsg):
+                    if len"""
+
+
+            # Liar agent - detect messages in impossible order
+            if 'Opening' in message and 'Moving' not in self._msgHist[member]:
                 self._updateTrustBy(member, -0.2)
                 continue
             if 'Searching' in message and 'Moving' not in self._msgHist[member]:
                 self._updateTrustBy(member, -0.2)
                 continue
+            if 'Found' in message and ('Moving' not in self._msgHist[member]
+                                       or 'Searching' not in self._msgHist[member]):
+                self._updateTrustBy(member, -0.2)
+                continue
+            if 'Picking' in message and ('Moving' not in self._msgHist[member]
+                                         or 'Searching' not in self._msgHist[member]):
+                self._updateTrustBy(member, -0.2)
+                continue
             if 'Dropped' in message and 'Picking' not in self._msgHist[member]:
                 self._updateTrustBy(member, -0.2)
                 continue
+
+            # Lazy agent - detect unexpected order of messages
+            oldMsg = self._oldMsg[member]
+            if oldMsg is not None and oldMsg != message:
+                if 'Opening' in oldMsg and 'Searching' not in message:
+                    self._updateTrustBy(member, -0.1)
 
     def _updateTrustBy(self, member, amount):
         current = self._trustPerAgent[member]
@@ -126,8 +148,9 @@ class Team40Agent(BW4TBrain):
                     self._teamMembers.append(member)
 
             for member in self._teamMembers:
-                # default trust values to 0.5
+                # Default trust values to 0.5
                 self._trustPerAgent[member] = 0.5
+
             self._activeObjectives = [goal for goal in state.values()
                                       if 'is_goal_block' in goal and goal['is_goal_block']]
         self._isFirstAction = False
@@ -139,12 +162,12 @@ class Team40Agent(BW4TBrain):
             if self._latestMsg[member] == self._oldMsg[member]:
                 newMessages[member] = None
             else:
-                newMessages[member] = self._latestMsg
+                newMessages[member] = self._latestMsg[member]
         # Update member trusts based on newest messages
         self._updateTrusts(newMessages)
 
         if self._doNothing:
-            print(self._trustPerAgent)
+            print(self._oldMsg, newMessages)
             return None, {}
 
         while True:
@@ -163,7 +186,7 @@ class Team40Agent(BW4TBrain):
 
                 # Still have to look for goal objects
                 elif len(self._activeObjectives) != 0:
-                    self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
+                    self._phase = Phase.PLAN_PATH_TO_ROOM
 
                 # No job left to do
                 else:
@@ -193,7 +216,7 @@ class Team40Agent(BW4TBrain):
                 self._activeObjectives.pop(0)
                 return DropObject.__name__, {'object_id': self._carrying[0]['obj_id']}
 
-            if Phase.PLAN_PATH_TO_CLOSED_DOOR == self._phase:
+            if Phase.PLAN_PATH_TO_ROOM == self._phase:
                 self._navigator.reset_full()
                 closedDoors = [door for door in state.values()
                                if 'class_inheritance' in door
@@ -286,11 +309,11 @@ class Team40Agent(BW4TBrain):
                 if not self._roomIsUseless:
                     return CloseDoorAction.__name__, {'object_id': self._door['obj_id']}
 
-    def _indexObjEquals(self, objList, obj):
-        for i in range(len(objList)):
-
-            if self._objEquals(objList[i], obj):
-                return i
+    def _indexObjEquals(self, objList1, objList2):
+        for i in range(len(objList1)):
+            for j in range(len(objList2)):
+                if self._objEquals(objList1[i], objList2):
+                    return i, j
         return -1
 
     def _hasCommon(self, li1, li2):
