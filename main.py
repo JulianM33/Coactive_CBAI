@@ -13,7 +13,9 @@ if __name__ == "__main__":
     agents = [
         {'name': 'agent1', 'botclass': Team40Agent, 'settings': {'do_log': True}},
         {'name': 'agent2', 'botclass': Team40Agent, 'settings': {'do_log': True}},
-        {'name': 'agent3', 'botclass': Team40Agent, 'settings': {'do_log': True}}
+        {'name': 'agent3', 'botclass': Team40Agent, 'settings': {'do_log': True}},
+        {'name': 'agent4', 'botclass': Team40Agent, 'settings': {'do_log': True}},
+        {'name': 'agent5', 'botclass': Team40Agent, 'settings': {'do_log': True}}
         ]
 
     print("Started world...")

@@ -290,9 +290,13 @@ class Team40Agent(BW4TBrain):
 
                 # Trustworthy member picked up a block
                 if 'Picking up' in newMessages[member] and self._trustPerMember[member] >= 0.9:
+                    if len(self._activeObjectives) == 0:
+                        continue
                     ind = indexObjStrEquals(self._activeObjectives, parseBlockVisual(newMessages[member]))
                     for i in range(len(self._activeObjectives)):
                         if i <= ind:
+                            if len(self._activeObjectives) == 0:
+                                break
                             self._activeObjectives.pop(i)
                     self._log(member + ' is picking up a goal block, updating active list')
 
@@ -365,6 +369,10 @@ class Team40Agent(BW4TBrain):
 
             if Phase.VERIFY_DROP == self._phase:
                 self._log('checking if ' + self._goCheck['name'] + ' actually dropped at goal')
+                if len(self._activeObjectives) == 0:
+                    self._goCheck = None
+                    self._phase = Phase.DECIDE_ACTION
+                    return None, {}
                 ind = indexObjStrEquals(self._activeObjectives, self._goCheck['visualization'])
                 if ind == -1:
                     self._updateTrustBy(self._goCheck['name'], -0.15)
@@ -387,6 +395,10 @@ class Team40Agent(BW4TBrain):
             if Phase.VERIFY == self._phase:
                 nearby_objects = [obj for obj in state.values() if 'is_collectable' in obj and obj['is_collectable']]
                 ind = indexObjStrEquals(nearby_objects, self._goCheck['visualization'])
+                if len(self._activeObjectives) == 0:
+                    self._goCheck = None
+                    self._phase = Phase.DECIDE_ACTION
+                    return None, {}
                 if ind != -1 and nearby_objects[ind]['location'] == self._loc_goal:
                     self._updateTrustBy(self._goCheck['name'], 0.2)
                     ind = indexObjStrEquals(self._activeObjectives, self._goCheck['visualization'])
@@ -435,6 +447,9 @@ class Team40Agent(BW4TBrain):
                                 closedDoors.remove(cd)
 
                 # Randomly pick a closed door
+                if len(closedDoors) == 0:
+                    self._phase = Phase.DECIDE_ACTION
+                    return None, {}
                 self._door = random.choice(closedDoors)
                 doorLoc = self._door['location']
                 # Location in front of door is south from door
@@ -471,6 +486,9 @@ class Team40Agent(BW4TBrain):
                 self._state_tracker.update(state)
 
                 nearby_objects = [obj for obj in state.values() if 'is_collectable' in obj and obj['is_collectable']]
+                if len(self._activeObjectives) == 0:
+                    self._phase = Phase.DECIDE_ACTION
+                    return None, {}
                 objInd = indexObjEquals(nearby_objects, self._activeObjectives[0])
 
                 if hasCommon(nearby_objects, self._activeObjectives):
@@ -500,6 +518,9 @@ class Team40Agent(BW4TBrain):
                 self._sendMessage('Picking up goal block ' + str(self._searched_obj['visualization'])
                                   + ' at location ' + str(self._searched_obj['location']),
                                   self._agentName)
+                if len(self._activeObjectives) == 0:
+                    self._phase = Phase.DECIDE_ACTION
+                    return None, {}
                 ind = indexObjEquals(self._activeObjectives, self._searched_obj)
                 self._dropInfo = self._activeObjectives[ind]['location']
                 self._activeObjectives.pop(0)
