@@ -12,7 +12,7 @@ press the start button in god mode to start the session.
 if __name__ == "__main__":
     agents = [
         {'name': 'agent1', 'botclass': Team40Agent, 'settings': {}},
-        {'name': 'logger', 'botclass': Team40Agent, 'settings': {'do_nothing': True}}
+        {'name': 'logger', 'botclass': Team40Agent, 'settings': {'do_log': True, 'do_nothing': True}}
         ]
 
     print("Started world...")

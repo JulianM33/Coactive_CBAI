@@ -69,6 +69,12 @@ class Team40Agent(BW4TBrain):
             if tempMsg[charInd] == '}':
                 return tempMsg[:charInd + 1]
 
+    def _histHasSub(self, member, sub):
+        for st in self._msgHist[member]:
+            if sub in st:
+                return True
+        return False
+
     def _sendMessage(self, mssg, sender):
         '''
         Enable sending messages in one line of code
@@ -85,7 +91,7 @@ class Team40Agent(BW4TBrain):
                 if mssg.from_id == member:
                     self._latestMsg[member] = mssg.content
 
-                    if mssg.content not in self._msgHist:
+                    if mssg.content not in self._msgHist[member]:
                         self._msgHist[member].append(mssg.content)
 
             if member not in self._oldMsg:
@@ -98,7 +104,7 @@ class Team40Agent(BW4TBrain):
     def _updateTrusts(self, newestMsg):
         for member in newestMsg.keys():
             # Decrease member trust by default
-            self._updateTrustBy(member, -0.002)
+            self._updateTrustBy(member, -0.0004)
             if self._trustPerMember[member] < 0:
                 self._trustPerMember[member] = 0
 
@@ -132,28 +138,27 @@ class Team40Agent(BW4TBrain):
                     continue
 
             # Liar agent - detect messages in impossible order
-            if 'Opening door of' in message and \
-                    ('Moving to ' + self._removePrefix('Opening door of ', message)) not in self._msgHist[member]:
-                self._print(member + ' lied')
+            if 'Opening door of' in message:
+                if ('Moving to ' + self._removePrefix('Opening door of ', message)) not in self._msgHist[member]:
+                    self._log(member + ' - lie: opening without moving')
+                    self._updateTrustBy(member, -0.2)
+                    continue
+            if 'Searching through' in message:
+                if ('Moving to ' + self._removePrefix('Searching through ', message)) not in self._msgHist[member]:
+                    self._log(member + ' - lie: searching without moving')
+                    self._updateTrustBy(member, -0.2)
+                    continue
+            if 'Found goal' in message and not self._histHasSub(member, 'Searching through'):  # TODO: improve this
+                self._log(member + ' - lie: found without searching')
                 self._updateTrustBy(member, -0.2)
                 continue
-            if 'Searching through' in message and \
-                    ('Moving to ' + self._removePrefix('Searching through ', message)) not in self._msgHist[member]:
-                self._print(member + ' lied')
-                self._updateTrustBy(member, -0.2)
-                continue
-            if 'Found goal' in message and \
-                    ('Searching through ' + self._parseLocation(message)) not in self._msgHist[member]:
-                self._print(member + ' lied')
-                self._updateTrustBy(member, -0.2)
-                continue
-            if 'Picking' in message and \
-                    ('Moving' not in self._msgHist[member] or 'Searching' not in self._msgHist[member]):
-                self._print(member + ' lied')
-                self._updateTrustBy(member, -0.2)
-                continue
-            if 'Dropped' in message and 'Picking' not in self._msgHist[member]:
-                self._print(member + ' lied')
+            if 'Picking' in message:
+                if not self._histHasSub(member, 'Moving') or not self._histHasSub(member, 'Searching'):
+                    self._log(member + ' - lie: picking without searching or moving')
+                    self._updateTrustBy(member, -0.2)
+                    continue
+            if 'Dropped' in message and not self._histHasSub(member, 'Picking'):
+                self._log(member + ' - lie: dropping without picking')
                 self._updateTrustBy(member, -0.2)
                 continue
 
@@ -163,34 +168,43 @@ class Team40Agent(BW4TBrain):
 
                 # Lazy agent - not searching room after opening
                 if 'Opening' in oldMsg and 'Searching' not in message:
+                    self._log(member + ' - lazy: not searching after opening')
                     self._updateTrustBy(member, -0.1)
                     continue
                 # Lazy agent - not picking up although not carrying anything
                 if 'Found' in oldMsg and 'Picking' not in message:
-                    if 'Picking' not in self._msgHist[member]:
+                    if self._histHasSub(member, 'Picking'):
+                        self._log(member + ' - lazy: not picking after finding')
                         self._updateTrustBy(member, -0.1)
                         continue
 
                 # Normal cases - Check if room is consistent
                 if 'Moving to' in oldMsg and 'Opening door of' in message:
                     if self._removePrefix('Moving to ', oldMsg) == self._removePrefix('Opening door of ', message):
-                        self._updateTrustBy(member, 0.1)
+                        self._log(member + ' - legit move: moved to -> open door')
+                        self._updateTrustBy(member, 0.05)
                         continue
                 if 'Opening door of' in oldMsg and 'Searching through' in message:
                     if self._removePrefix('Opening door of ', oldMsg) == \
                             self._removePrefix('Searching through ', message):
-                        self._updateTrustBy(member, 0.1)
+                        self._log(member + ' - legit move: open door -> search')
+                        self._updateTrustBy(member, 0.05)
                         continue
                 if 'Found goal block' in oldMsg and 'Picking up goal block' in message:
                     if self._parseLocation(oldMsg) == self._parseLocation(message):
                         if self._parseBlockVisual(oldMsg) == self._parseBlockVisual(message):
-                            self._updateTrustBy(member, 0.2)
+                            self._log(member + ' - legit move: find -> pick up')
+                            self._updateTrustBy(member, 0.15)
                             continue
                 if 'Picking up goal block' in oldMsg and 'Dropped goal block' in message:
                     if self._parseBlockVisual(oldMsg) == self._parseBlockVisual(message):
-                        self._updateTrustBy(member, 0.2)
+                        self._log(member + ' - legit move: pick up -> drop off')
+                        self._updateTrustBy(member, 0.15)
+                        continue
                 if 'Dropped goal block' in oldMsg and 'Moving to' in message:
+                    self._log(member + ' - legit move: drop off -> move to')
                     self._updateTrustBy(member, 0.1)
+                    continue
 
     def _updateTrustBy(self, member, amount):
         current = self._trustPerMember[member]
@@ -239,7 +253,7 @@ class Team40Agent(BW4TBrain):
         self._updateTrusts(newMessages)
 
         if self._doNothing:
-            print(self._memberObjects)
+            print(self._trustPerMember)
             return None, {}
 
         while True:
@@ -404,6 +418,6 @@ class Team40Agent(BW4TBrain):
             return False
         return True
 
-    def _print(self, msg):
+    def _log(self, msg):
         if self._doLog:
             print(msg)
