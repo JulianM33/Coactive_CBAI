@@ -168,7 +168,7 @@ class Team40Agent(BW4TBrain):
     def _updateTrusts(self, newestMsg):
         for member in newestMsg.keys():
             # Decrease member trust by default
-            self._updateTrustBy(member, -0.0004)
+            self._updateTrustBy(member, -0.0005)
             if self._trustPerMember[member] < 0:
                 self._trustPerMember[member] = 0
 
@@ -246,27 +246,27 @@ class Team40Agent(BW4TBrain):
                 # Normal cases - Check if room is consistent
                 if 'Moving to' in oldMsg and 'Opening door of' in message:
                     if removePrefix('Moving to ', oldMsg) == removePrefix('Opening door of ', message):
-                        self._updateTrustBy(member, 0.05)
+                        self._updateTrustBy(member, 0.03)
                         self._log(member + ' - legit move: moved to -> open door')
                         continue
                 if 'Opening door of' in oldMsg and 'Searching through' in message:
                     if removePrefix('Opening door of ', oldMsg) == removePrefix('Searching through ', message):
-                        self._updateTrustBy(member, 0.05)
+                        self._updateTrustBy(member, 0.03)
                         self._log(member + ' - legit move: open door -> search')
                         continue
                 if 'Found goal block' in oldMsg and 'Picking up goal block' in message:
                     if parseLocation(oldMsg) == parseLocation(message):
                         if parseBlockVisual(oldMsg) == parseBlockVisual(message):
-                            self._updateTrustBy(member, 0.05)
+                            self._updateTrustBy(member, 0.07)
                             self._log(member + ' - legit move: find -> pick up')
                             continue
                 if 'Picking up goal block' in oldMsg and 'Dropped goal block' in message:
                     if parseBlockVisual(oldMsg) == parseBlockVisual(message):
-                        self._updateTrustBy(member, 0.05)
+                        self._updateTrustBy(member, 0.07)
                         self._log(member + ' - legit move: pick up -> drop off')
                         continue
                 if 'Dropped goal block' in oldMsg and 'Moving to' in message:
-                    self._updateTrustBy(member, 0.05)
+                    self._updateTrustBy(member, 0.07)
                     self._log(member + ' - legit move: drop off -> move to')
                     continue
 
