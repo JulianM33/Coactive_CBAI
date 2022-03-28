@@ -95,6 +95,7 @@ class Team40Agent(BW4TBrain):
         self._goCheck = None
         self._state_tracker = None
         self._navigator = None
+        self._dropInfo = None
 
         self._msgHist = {}
         self._oldMsg = {}
@@ -203,26 +204,26 @@ class Team40Agent(BW4TBrain):
             # Liar agent - detect messages in impossible order
             if 'Opening door of' in message:
                 if ('Moving to ' + removePrefix('Opening door of ', message)) not in self._msgHist[member]:
-                    self._log(member + ' - lie: opening without moving')
                     self._updateTrustBy(member, -0.2)
+                    self._log(member + ' - lie: opening without moving')
                     continue
             if 'Searching through' in message:
                 if ('Moving to ' + removePrefix('Searching through ', message)) not in self._msgHist[member]:
-                    self._log(member + ' - lie: searching without moving')
                     self._updateTrustBy(member, -0.2)
+                    self._log(member + ' - lie: searching without moving')
                     continue
             if 'Found goal' in message and not self._histHasSub(member, 'Searching through'):  # TODO: improve this
-                self._log(member + ' - lie: found without searching')
                 self._updateTrustBy(member, -0.2)
+                self._log(member + ' - lie: found without searching')
                 continue
             if 'Picking' in message:
                 if not self._histHasSub(member, 'Moving') or not self._histHasSub(member, 'Searching'):
-                    self._log(member + ' - lie: picking without searching or moving')
                     self._updateTrustBy(member, -0.2)
+                    self._log(member + ' - lie: picking without searching or moving')
                     continue
             if 'Dropped' in message and not self._histHasSub(member, 'Picking'):
-                self._log(member + ' - lie: dropping without picking')
                 self._updateTrustBy(member, -0.2)
+                self._log(member + ' - lie: dropping without picking')
                 continue
 
             # Check order of messages
@@ -231,42 +232,41 @@ class Team40Agent(BW4TBrain):
 
                 # Lazy agent - not searching room after opening
                 if 'Opening' in oldMsg and 'Searching' not in message:
-                    self._log(member + ' - lazy: not searching after opening')
                     self._updateTrustBy(member, -0.1)
+                    self._log(member + ' - lazy: not searching after opening')
                     continue
                 # Lazy agent - not picking up although not carrying anything
                 if 'Found' in oldMsg and 'Picking' not in message:
                     if self._histHasSub(member, 'Picking'):
-                        self._log(member + ' - lazy: not picking after finding')
                         self._updateTrustBy(member, -0.1)
+                        self._log(member + ' - lazy: not picking after finding')
                         continue
 
                 # Normal cases - Check if room is consistent
                 if 'Moving to' in oldMsg and 'Opening door of' in message:
                     if removePrefix('Moving to ', oldMsg) == removePrefix('Opening door of ', message):
-                        self._log(member + ' - legit move: moved to -> open door')
                         self._updateTrustBy(member, 0.05)
+                        self._log(member + ' - legit move: moved to -> open door')
                         continue
                 if 'Opening door of' in oldMsg and 'Searching through' in message:
-                    if removePrefix('Opening door of ', oldMsg) == \
-                            removePrefix('Searching through ', message):
-                        self._log(member + ' - legit move: open door -> search')
+                    if removePrefix('Opening door of ', oldMsg) == removePrefix('Searching through ', message):
                         self._updateTrustBy(member, 0.05)
+                        self._log(member + ' - legit move: open door -> search')
                         continue
                 if 'Found goal block' in oldMsg and 'Picking up goal block' in message:
                     if parseLocation(oldMsg) == parseLocation(message):
                         if parseBlockVisual(oldMsg) == parseBlockVisual(message):
-                            self._log(member + ' - legit move: find -> pick up')
                             self._updateTrustBy(member, 0.05)
+                            self._log(member + ' - legit move: find -> pick up')
                             continue
                 if 'Picking up goal block' in oldMsg and 'Dropped goal block' in message:
                     if parseBlockVisual(oldMsg) == parseBlockVisual(message):
-                        self._log(member + ' - legit move: pick up -> drop off')
                         self._updateTrustBy(member, 0.05)
+                        self._log(member + ' - legit move: pick up -> drop off')
                         continue
                 if 'Dropped goal block' in oldMsg and 'Moving to' in message:
-                    self._log(member + ' - legit move: drop off -> move to')
                     self._updateTrustBy(member, 0.05)
+                    self._log(member + ' - legit move: drop off -> move to')
                     continue
 
     def _trustActions(self, newMessages):
@@ -274,17 +274,17 @@ class Team40Agent(BW4TBrain):
             if newMessages[member] is not None:
 
                 # Member is trustworthy
-                if 'Moving to' in newMessages[member] and self._trustPerMember[member] >= 0.9:
+                if 'Moving to' in newMessages[member] and self._trustPerMember[member] >= 0.8:
                     self._trustedMemberRoom[member] = removePrefix('Moving to ', newMessages[member])
                 if 'Picking up' in newMessages[member] and self._trustPerMember[member] >= 0.9:
-                    self._log(member + ' is picking up a goal block, updating active list')
                     ind = indexObjStrEquals(self._activeObjectives, parseBlockVisual(newMessages[member]))
                     for i in range(len(self._activeObjectives)):
                         if i <= ind:
                             self._activeObjectives.pop(i)
+                    self._log(member + ' is picking up a goal block, updating active list')
 
                 # Member is iffy
-                if 'Dropped goal block' in newMessages[member] and 0.4 < self._trustPerMember[member] < 0.9:
+                if 'Dropped goal block' in newMessages[member] and 0.3 < self._trustPerMember[member] < 0.9:
                     self._goCheck = {'name': member, 'visualization': parseBlockVisual(newMessages[member])}
 
     def filter_bw4t_observations(self, state):
@@ -314,11 +314,6 @@ class Team40Agent(BW4TBrain):
                                       if 'is_goal_block' in goal and goal['is_goal_block']]
         self._isFirstAction = False
 
-        # Other team members are finishing the task
-        if len(state[self.agent_id]['is_carrying']) == 0 and self._goCheck is None and len(self._activeObjectives) == 0:
-            self._log('rip')
-            return None, {}
-
         # Process messages from team members
         self._processMessages(self._teamMembers)
         newMessages = getNewMsg(self._oldMsg, self._latestMsg, self._teamMembers)
@@ -336,13 +331,7 @@ class Team40Agent(BW4TBrain):
 
                 # Carrying something, go drop it
                 if len(self._carrying) != 0:
-                    ind = indexObjEquals(self._activeObjectives, self._carrying[0])
-
-                    # Holding a useless block
-                    if ind == -1:
-                        return None, {}
-                    else:
-                        self._phase = Phase.PLAN_PATH_TO_DROP_OBJECT
+                    self._phase = Phase.PLAN_PATH_TO_DROP_OBJECT
 
                 elif self._goCheck is not None:
                     self._phase = Phase.VERIFY_DROP
@@ -356,6 +345,7 @@ class Team40Agent(BW4TBrain):
                     return None, {}
 
             if Phase.VERIFY_DROP == self._phase:
+                self._log('checking if ' + self._goCheck['name'] + ' actually dropped at goal')
                 ind = indexObjStrEquals(self._activeObjectives, self._goCheck['visualization'])
                 if ind == -1:
                     self._updateTrustBy(self._goCheck['name'], -0.15)
@@ -377,25 +367,21 @@ class Team40Agent(BW4TBrain):
                 nearby_objects = [obj for obj in state.values() if 'is_collectable' in obj and obj['is_collectable']]
                 ind = indexObjStrEquals(nearby_objects, self._goCheck['visualization'])
                 if ind != -1 and nearby_objects[ind]['location'] == self._loc_goal:
-                    self._log(self._goCheck['name'] + ' - legit move: actually dropped at goal')
                     self._updateTrustBy(self._goCheck['name'], 0.2)
                     ind = indexObjStrEquals(self._activeObjectives, self._goCheck['visualization'])
                     for i in range(len(self._activeObjectives)):
                         if i <= ind:
                             self._activeObjectives.pop(i)
+                    self._log(self._goCheck['name'] + ' - legit move: actually dropped at goal')
                 else:
-                    self._log(self._goCheck['name' + ' - liar: false alarm'])
                     self._updateTrustBy(self._goCheck['name'], -0.3)
+                    self._log(self._goCheck['name' + ' - liar: false alarm'])
                 self._goCheck = None
                 self._phase = Phase.DECIDE_ACTION
 
             if Phase.PLAN_PATH_TO_DROP_OBJECT == self._phase:
                 self._navigator.reset_full()
-
-                ind = indexObjEquals(self._activeObjectives, self._carrying[0])
-                self._loc_goal = self._activeObjectives[ind]['location']
-
-                self._navigator.add_waypoint(self._loc_goal)
+                self._navigator.add_waypoint(self._dropInfo)
                 self._phase = Phase.FOLLOW_PATH_TO_DROP_OBJECT
 
             if Phase.FOLLOW_PATH_TO_DROP_OBJECT == self._phase:
@@ -408,8 +394,8 @@ class Team40Agent(BW4TBrain):
             if Phase.DROP_OBJECT == self._phase:
                 self._phase = Phase.DECIDE_ACTION
                 self._sendMessage('Dropped goal block ' + str(self._carrying[0]['visualization']) +
-                                  ' at location ' + str(self._loc_goal), agent_name)
-                self._activeObjectives.pop(indexObjEquals(self._activeObjectives, self._carrying[0]))
+                                  ' at location ' + str(self._dropInfo), agent_name)
+                self._dropInfo = None
                 return DropObject.__name__, {'object_id': self._carrying[0]['obj_id']}
 
             if Phase.PLAN_PATH_TO_ROOM == self._phase:
@@ -493,6 +479,9 @@ class Team40Agent(BW4TBrain):
                 self._sendMessage('Picking up goal block ' + str(self._searched_obj['visualization'])
                                   + ' at location ' + str(self._searched_obj['location']),
                                   agent_name)
+                ind = indexObjEquals(self._activeObjectives, self._searched_obj)
+                self._dropInfo = self._activeObjectives[ind]['location']
+                self._activeObjectives.pop(0)
                 return GrabObject.__name__, {'object_id': self._searched_obj['obj_id']}
 
             if Phase.EXIT_ROOM == self._phase:
@@ -510,5 +499,4 @@ class Team40Agent(BW4TBrain):
 
     def _log(self, msg):
         if self._doLog:
-            print(msg)
             print(msg)
