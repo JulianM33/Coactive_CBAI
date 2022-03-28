@@ -20,7 +20,10 @@ class Phase(enum.Enum):
     INITIATE_ROOM_SEARCH = 8,
     SEARCH_ROOM = 9,
     FOUND_BLOCK = 10,
-    EXIT_ROOM = 11
+    EXIT_ROOM = 11,
+    VERIFY_DROP = 12,
+    FOLLOW_PATH_TO_VERIFY = 13,
+    VERIFY = 14
 
 def removePrefix(pre, message):
     if message.startswith(pre):
@@ -67,14 +70,29 @@ def objEquals(obj1, obj2):
         return False
     return True
 
+def indexObjStrEquals(objList, objStr):
+    for i in range(len(objList)):
+        vis = objList[i]['visualization']
+        if str(vis['shape']) in objStr and vis['colour'] in objStr:
+            return i
+    return -1
+
+def getNewMsg(old, latest, members):
+    newMessages = {}
+    for member in members:
+        if latest[member] == old[member]:
+            newMessages[member] = None
+        else:
+            newMessages[member] = latest[member]
+    return newMessages
+
 class Team40Agent(BW4TBrain):
 
     def __init__(self, settings: Dict[str, object]):
         super().__init__(settings)
         self._isFirstAction = True
         self._phase = Phase.DECIDE_ACTION
-        self._teamMembers = []
-        self._activeObjectives = []
+        self._goCheck = None
         self._state_tracker = None
         self._navigator = None
 
@@ -83,6 +101,8 @@ class Team40Agent(BW4TBrain):
         self._latestMsg = {}
         self._trustPerMember = {}
 
+        self._teamMembers = []
+        self._activeObjectives = []
         self._memberObjects = {}
         self._trustedMemberRoom = {}
 
@@ -131,6 +151,17 @@ class Team40Agent(BW4TBrain):
                 self._latestMsg[member] = None
             if member not in self._msgHist:
                 self._msgHist[member] = []
+
+    def _updateTrustBy(self, member, amount):
+        current = self._trustPerMember[member]
+        if amount == 0:
+            return
+        elif current + amount > 1:
+            self._trustPerMember[member] = 1
+        elif current + amount < 0:
+            self._trustPerMember[member] = 0
+        else:
+            self._trustPerMember[member] += amount
 
     def _updateTrusts(self, newestMsg):
         for member in newestMsg.keys():
@@ -226,28 +257,35 @@ class Team40Agent(BW4TBrain):
                     if parseLocation(oldMsg) == parseLocation(message):
                         if parseBlockVisual(oldMsg) == parseBlockVisual(message):
                             self._log(member + ' - legit move: find -> pick up')
-                            self._updateTrustBy(member, 0.15)
+                            self._updateTrustBy(member, 0.05)
                             continue
                 if 'Picking up goal block' in oldMsg and 'Dropped goal block' in message:
                     if parseBlockVisual(oldMsg) == parseBlockVisual(message):
                         self._log(member + ' - legit move: pick up -> drop off')
-                        self._updateTrustBy(member, 0.15)
+                        self._updateTrustBy(member, 0.05)
                         continue
                 if 'Dropped goal block' in oldMsg and 'Moving to' in message:
                     self._log(member + ' - legit move: drop off -> move to')
-                    self._updateTrustBy(member, 0.1)
+                    self._updateTrustBy(member, 0.05)
                     continue
 
-    def _updateTrustBy(self, member, amount):
-        current = self._trustPerMember[member]
-        if amount == 0:
-            return
-        elif current + amount > 1:
-            self._trustPerMember[member] = 1
-        elif current + amount < 0:
-            self._trustPerMember[member] = 0
-        else:
-            self._trustPerMember[member] += amount
+    def _trustActions(self, newMessages):
+        for member in self._teamMembers:
+            if newMessages[member] is not None:
+
+                # Member is trustworthy
+                if 'Moving to' in newMessages[member] and self._trustPerMember[member] >= 0.9:
+                    self._trustedMemberRoom[member] = removePrefix('Moving to ', newMessages[member])
+                if 'Picking up' in newMessages[member] and self._trustPerMember[member] >= 0.9:
+                    self._log(member + ' is picking up a goal block, updating active list')
+                    ind = indexObjStrEquals(self._activeObjectives, parseBlockVisual(newMessages[member]))
+                    for i in range(len(self._activeObjectives)):
+                        if i <= ind:
+                            self._activeObjectives.pop(i)
+
+                # Member is iffy
+                if 'Dropped goal block' in newMessages[member] and 0.4 < self._trustPerMember[member] < 0.9:
+                    self._goCheck = {'name': member, 'visualization': parseBlockVisual(newMessages[member])}
 
     def filter_bw4t_observations(self, state):
         return state
@@ -264,7 +302,7 @@ class Team40Agent(BW4TBrain):
 
             for member in self._teamMembers:
                 # Default trust values to 0.5
-                self._trustPerMember[member] = 0.5
+                self._trustPerMember[member] = 0.6
 
                 # Initialize object list per member
                 self._memberObjects[member] = []
@@ -276,27 +314,20 @@ class Team40Agent(BW4TBrain):
                                       if 'is_goal_block' in goal and goal['is_goal_block']]
         self._isFirstAction = False
 
+        # Other team members are finishing the task
+        if len(state[self.agent_id]['is_carrying']) == 0 and self._goCheck is None and len(self._activeObjectives) == 0:
+            self._log('rip')
+            return None, {}
+
         # Process messages from team members
         self._processMessages(self._teamMembers)
-        newMessages = {}
-        for member in self._teamMembers:
-            if self._latestMsg[member] == self._oldMsg[member]:
-                newMessages[member] = None
-            else:
-                newMessages[member] = self._latestMsg[member]
+        newMessages = getNewMsg(self._oldMsg, self._latestMsg, self._teamMembers)
         # Update member trusts based on newest messages
         self._updateTrusts(newMessages)
-
-        # Member is trustworthy
-        for member in self._teamMembers:
-            if newMessages[member] is not None:
-                if 'Moving to' in newMessages[member] and self._trustPerMember[member] > 0.8:
-                    self._trustedMemberRoom[member] = removePrefix('Moving to ', newMessages[member])
-                # if 'Picking up' in newMessages[member] and self._trustPerMember[member] > 0.8:
-                #    self._
+        # Do actions based on trusts
+        self._trustActions(newMessages)
 
         if self._doNothing:
-            print(self._trustPerMember)
             return None, {}
 
         while True:
@@ -313,6 +344,9 @@ class Team40Agent(BW4TBrain):
                     else:
                         self._phase = Phase.PLAN_PATH_TO_DROP_OBJECT
 
+                elif self._goCheck is not None:
+                    self._phase = Phase.VERIFY_DROP
+
                 # Still have to look for goal objects
                 elif len(self._activeObjectives) != 0:
                     self._phase = Phase.PLAN_PATH_TO_ROOM
@@ -320,6 +354,40 @@ class Team40Agent(BW4TBrain):
                 # No job left to do
                 else:
                     return None, {}
+
+            if Phase.VERIFY_DROP == self._phase:
+                ind = indexObjStrEquals(self._activeObjectives, self._goCheck['visualization'])
+                if ind == -1:
+                    self._updateTrustBy(self._goCheck['name'], -0.15)
+                    self._phase = Phase.DECIDE_ACTION
+                else:
+                    self._navigator.reset_full()
+                    self._loc_goal = self._activeObjectives[ind]['location']
+                    self._navigator.add_waypoint(self._loc_goal)
+                    self._phase = Phase.FOLLOW_PATH_TO_VERIFY
+
+            if Phase.FOLLOW_PATH_TO_VERIFY == self._phase:
+                self._state_tracker.update(state)
+                action = self._navigator.get_move_action(self._state_tracker)
+                if action is not None:
+                    return action, {}
+                self._phase = Phase.VERIFY
+
+            if Phase.VERIFY == self._phase:
+                nearby_objects = [obj for obj in state.values() if 'is_collectable' in obj and obj['is_collectable']]
+                ind = indexObjStrEquals(nearby_objects, self._goCheck['visualization'])
+                if ind != -1 and nearby_objects[ind]['location'] == self._loc_goal:
+                    self._log(self._goCheck['name'] + ' - legit move: actually dropped at goal')
+                    self._updateTrustBy(self._goCheck['name'], 0.2)
+                    ind = indexObjStrEquals(self._activeObjectives, self._goCheck['visualization'])
+                    for i in range(len(self._activeObjectives)):
+                        if i <= ind:
+                            self._activeObjectives.pop(i)
+                else:
+                    self._log(self._goCheck['name' + ' - liar: false alarm'])
+                    self._updateTrustBy(self._goCheck['name'], -0.3)
+                self._goCheck = None
+                self._phase = Phase.DECIDE_ACTION
 
             if Phase.PLAN_PATH_TO_DROP_OBJECT == self._phase:
                 self._navigator.reset_full()
