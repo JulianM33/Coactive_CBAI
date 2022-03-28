@@ -22,6 +22,51 @@ class Phase(enum.Enum):
     FOUND_BLOCK = 10,
     EXIT_ROOM = 11
 
+def removePrefix(pre, message):
+    if message.startswith(pre):
+        return message[len(pre):]
+
+def parseLocation(message):
+    ind = message.index('at location')
+    return message[ind + len('at location '):]
+
+def parseBlockVisual(message):
+    ind = message.index('{')
+    tempMsg = message[ind:]
+    for charInd in range(len(tempMsg)):
+        if tempMsg[charInd] == '}':
+            return tempMsg[:charInd + 1]
+
+def indexObjEquals(objList, obj):
+    for i in range(len(objList)):
+        if objEquals(objList[i], obj):
+            return i
+    return -1
+
+def indexObjsEquals(objList1, objList2):
+    for i in range(len(objList1)):
+        for j in range(len(objList2)):
+            if objEquals(objList1[i], objList2[j]):
+                return i, j
+    return -1, -1
+
+def hasCommon(li1, li2):
+    for obj1 in li1:
+        for obj2 in li2:
+            if objEquals(obj1, obj2):
+                return True
+    return False
+
+def objEquals(obj1, obj2):
+    ov1 = obj1['visualization']
+    ov2 = obj2['visualization']
+
+    if ov1['shape'] != ov2['shape']:
+        return False
+    if ov1['colour'] != ov2['colour']:
+        return False
+    return True
+
 class Team40Agent(BW4TBrain):
 
     def __init__(self, settings: Dict[str, object]):
@@ -39,6 +84,7 @@ class Team40Agent(BW4TBrain):
         self._trustPerMember = {}
 
         self._memberObjects = {}
+        self._trustedMemberRoom = {}
 
         self._doNothing = False
         if 'do_nothing' in settings and settings['do_nothing']:
@@ -53,21 +99,6 @@ class Team40Agent(BW4TBrain):
         self._state_tracker = StateTracker(agent_id=self.agent_id)
         self._navigator = Navigator(agent_id=self.agent_id, action_set=self.action_set,
                                     algorithm=Navigator.A_STAR_ALGORITHM)
-
-    def _removePrefix(self, pre, message):
-        if message.startswith(pre):
-            return message[len(pre):]
-
-    def _parseLocation(self, message):
-        ind = message.index('at location')
-        return message[ind + len('at location '):]
-
-    def _parseBlockVisual(self, message):
-        ind = message.index('{')
-        tempMsg = message[ind:]
-        for charInd in range(len(tempMsg)):
-            if tempMsg[charInd] == '}':
-                return tempMsg[:charInd + 1]
 
     def _histHasSub(self, member, sub):
         for st in self._msgHist[member]:
@@ -119,7 +150,7 @@ class Team40Agent(BW4TBrain):
 
             # Liar agent - picking/dropping objects
             if 'Picking up goal block {' in message:
-                self._memberObjects[member].append(self._parseBlockVisual(message))
+                self._memberObjects[member].append(parseBlockVisual(message))
             if len(self._memberObjects[member]) > 2:
                 self._updateTrustBy(member, -0.2)
                 continue
@@ -127,24 +158,25 @@ class Team40Agent(BW4TBrain):
                 if len(self._memberObjects[member]) <= 0:
                     self._updateTrustBy(member, -0.2)
                     continue
-                vis = self._parseBlockVisual(message)
+                vis = parseBlockVisual(message)
                 found = False
                 for indObj in range(len(self._memberObjects[member])):
                     if self._memberObjects[member][indObj] == vis:
                         self._memberObjects[member].pop(indObj)
                         found = True
+                        break
                 if not found:
                     self._updateTrustBy(member, -0.2)
                     continue
 
             # Liar agent - detect messages in impossible order
             if 'Opening door of' in message:
-                if ('Moving to ' + self._removePrefix('Opening door of ', message)) not in self._msgHist[member]:
+                if ('Moving to ' + removePrefix('Opening door of ', message)) not in self._msgHist[member]:
                     self._log(member + ' - lie: opening without moving')
                     self._updateTrustBy(member, -0.2)
                     continue
             if 'Searching through' in message:
-                if ('Moving to ' + self._removePrefix('Searching through ', message)) not in self._msgHist[member]:
+                if ('Moving to ' + removePrefix('Searching through ', message)) not in self._msgHist[member]:
                     self._log(member + ' - lie: searching without moving')
                     self._updateTrustBy(member, -0.2)
                     continue
@@ -180,24 +212,24 @@ class Team40Agent(BW4TBrain):
 
                 # Normal cases - Check if room is consistent
                 if 'Moving to' in oldMsg and 'Opening door of' in message:
-                    if self._removePrefix('Moving to ', oldMsg) == self._removePrefix('Opening door of ', message):
+                    if removePrefix('Moving to ', oldMsg) == removePrefix('Opening door of ', message):
                         self._log(member + ' - legit move: moved to -> open door')
                         self._updateTrustBy(member, 0.05)
                         continue
                 if 'Opening door of' in oldMsg and 'Searching through' in message:
-                    if self._removePrefix('Opening door of ', oldMsg) == \
-                            self._removePrefix('Searching through ', message):
+                    if removePrefix('Opening door of ', oldMsg) == \
+                            removePrefix('Searching through ', message):
                         self._log(member + ' - legit move: open door -> search')
                         self._updateTrustBy(member, 0.05)
                         continue
                 if 'Found goal block' in oldMsg and 'Picking up goal block' in message:
-                    if self._parseLocation(oldMsg) == self._parseLocation(message):
-                        if self._parseBlockVisual(oldMsg) == self._parseBlockVisual(message):
+                    if parseLocation(oldMsg) == parseLocation(message):
+                        if parseBlockVisual(oldMsg) == parseBlockVisual(message):
                             self._log(member + ' - legit move: find -> pick up')
                             self._updateTrustBy(member, 0.15)
                             continue
                 if 'Picking up goal block' in oldMsg and 'Dropped goal block' in message:
-                    if self._parseBlockVisual(oldMsg) == self._parseBlockVisual(message):
+                    if parseBlockVisual(oldMsg) == parseBlockVisual(message):
                         self._log(member + ' - legit move: pick up -> drop off')
                         self._updateTrustBy(member, 0.15)
                         continue
@@ -237,6 +269,9 @@ class Team40Agent(BW4TBrain):
                 # Initialize object list per member
                 self._memberObjects[member] = []
 
+                # Initialize target room per member
+                self._trustedMemberRoom[member] = None
+
             self._activeObjectives = [goal for goal in state.values()
                                       if 'is_goal_block' in goal and goal['is_goal_block']]
         self._isFirstAction = False
@@ -252,6 +287,14 @@ class Team40Agent(BW4TBrain):
         # Update member trusts based on newest messages
         self._updateTrusts(newMessages)
 
+        # Member is trustworthy
+        for member in self._teamMembers:
+            if newMessages[member] is not None:
+                if 'Moving to' in newMessages[member] and self._trustPerMember[member] > 0.8:
+                    self._trustedMemberRoom[member] = removePrefix('Moving to ', newMessages[member])
+                # if 'Picking up' in newMessages[member] and self._trustPerMember[member] > 0.8:
+                #    self._
+
         if self._doNothing:
             print(self._trustPerMember)
             return None, {}
@@ -262,7 +305,7 @@ class Team40Agent(BW4TBrain):
 
                 # Carrying something, go drop it
                 if len(self._carrying) != 0:
-                    ind = self._indexObjEquals(self._activeObjectives, self._carrying[0])
+                    ind = indexObjEquals(self._activeObjectives, self._carrying[0])
 
                     # Holding a useless block
                     if ind == -1:
@@ -281,7 +324,7 @@ class Team40Agent(BW4TBrain):
             if Phase.PLAN_PATH_TO_DROP_OBJECT == self._phase:
                 self._navigator.reset_full()
 
-                ind = self._indexObjEquals(self._activeObjectives, self._carrying[0])
+                ind = indexObjEquals(self._activeObjectives, self._carrying[0])
                 self._loc_goal = self._activeObjectives[ind]['location']
 
                 self._navigator.add_waypoint(self._loc_goal)
@@ -298,7 +341,7 @@ class Team40Agent(BW4TBrain):
                 self._phase = Phase.DECIDE_ACTION
                 self._sendMessage('Dropped goal block ' + str(self._carrying[0]['visualization']) +
                                   ' at location ' + str(self._loc_goal), agent_name)
-                self._activeObjectives.pop(self._indexObjEquals(self._activeObjectives, self._carrying[0]))
+                self._activeObjectives.pop(indexObjEquals(self._activeObjectives, self._carrying[0]))
                 return DropObject.__name__, {'object_id': self._carrying[0]['obj_id']}
 
             if Phase.PLAN_PATH_TO_ROOM == self._phase:
@@ -307,6 +350,15 @@ class Team40Agent(BW4TBrain):
                                and 'Door' in door['class_inheritance'] and not door['is_open']]
                 if len(closedDoors) == 0:
                     return None, {}
+
+                # Remove doors that trusted members are visiting
+                for member in self._teamMembers:
+                    if self._trustedMemberRoom[member] is not None:
+                        for cd in closedDoors:
+                            if cd['room_name'] == self._trustedMemberRoom[member]:
+                                self._log(member + ' is visiting ' + cd['room_name'] + ', removing')
+                                closedDoors.remove(cd)
+
                 # Randomly pick a closed door
                 self._door = random.choice(closedDoors)
                 doorLoc = self._door['location']
@@ -344,9 +396,9 @@ class Team40Agent(BW4TBrain):
                 self._state_tracker.update(state)
 
                 nearby_objects = [obj for obj in state.values() if 'is_collectable' in obj and obj['is_collectable']]
-                objInd = self._indexObjEquals(nearby_objects, self._activeObjectives[0])
+                objInd = indexObjEquals(nearby_objects, self._activeObjectives[0])
 
-                if self._hasCommon(nearby_objects, self._activeObjectives):
+                if hasCommon(nearby_objects, self._activeObjectives):
                     self._roomIsUseless = False
 
                 if objInd != -1:
@@ -388,36 +440,7 @@ class Team40Agent(BW4TBrain):
                 if not self._roomIsUseless:
                     return CloseDoorAction.__name__, {'object_id': self._door['obj_id']}
 
-    def _indexObjEquals(self, objList, obj):
-        for i in range(len(objList)):
-            if self._objEquals(objList[i], obj):
-                return i
-        return -1
-
-    def _indexObjsEquals(self, objList1, objList2):
-        for i in range(len(objList1)):
-            for j in range(len(objList2)):
-                if self._objEquals(objList1[i], objList2[j]):
-                    return i, j
-        return -1, -1
-
-    def _hasCommon(self, li1, li2):
-        for obj1 in li1:
-            for obj2 in li2:
-                if self._objEquals(obj1, obj2):
-                    return True
-        return False
-
-    def _objEquals(self, obj1, obj2):
-        ov1 = obj1['visualization']
-        ov2 = obj2['visualization']
-
-        if ov1['shape'] != ov2['shape']:
-            return False
-        if ov1['colour'] != ov2['colour']:
-            return False
-        return True
-
     def _log(self, msg):
         if self._doLog:
+            print(msg)
             print(msg)
