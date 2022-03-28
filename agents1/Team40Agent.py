@@ -90,6 +90,7 @@ class Team40Agent(BW4TBrain):
 
     def __init__(self, settings: Dict[str, object]):
         super().__init__(settings)
+        self._agentName = None
         self._isFirstAction = True
         self._phase = Phase.DECIDE_ACTION
         self._goCheck = None
@@ -105,7 +106,7 @@ class Team40Agent(BW4TBrain):
         self._teamMembers = []
         self._activeObjectives = []
         self._memberObjects = {}
-        self._trustedMemberRoom = {}
+        self._memberRooms = {}
 
         self._doNothing = False
         if 'do_nothing' in settings and settings['do_nothing']:
@@ -269,13 +270,25 @@ class Team40Agent(BW4TBrain):
                     self._log(member + ' - legit move: drop off -> move to')
                     continue
 
+    def _updateMemberRoom(self):
+        for member in self._teamMembers:
+            if self._memberRooms[member] is None:
+                continue
+            elif self._memberRooms[member]['duration'] - 1 < 0:
+                self._memberRooms[member] = None
+            else:
+                self._memberRooms[member]['duration'] -= 1
+
     def _trustActions(self, newMessages):
         for member in self._teamMembers:
             if newMessages[member] is not None:
 
-                # Member is trustworthy
-                if 'Moving to' in newMessages[member] and self._trustPerMember[member] >= 0.8:
-                    self._trustedMemberRoom[member] = removePrefix('Moving to ', newMessages[member])
+                # A member is visiting a room
+                if 'Moving to' in newMessages[member] and self._trustPerMember[member] >= 0.5:
+                    self._memberRooms[member] = {'room': removePrefix('Moving to ', newMessages[member]),
+                                                 'duration': int(round(self._trustPerMember[member] * 20, 0))}
+
+                # Trustworthy member picked up a block
                 if 'Picking up' in newMessages[member] and self._trustPerMember[member] >= 0.9:
                     ind = indexObjStrEquals(self._activeObjectives, parseBlockVisual(newMessages[member]))
                     for i in range(len(self._activeObjectives)):
@@ -283,7 +296,7 @@ class Team40Agent(BW4TBrain):
                             self._activeObjectives.pop(i)
                     self._log(member + ' is picking up a goal block, updating active list')
 
-                # Member is iffy
+                # Iffy member dropped a block
                 if 'Dropped goal block' in newMessages[member] and 0.3 < self._trustPerMember[member] < 0.9:
                     self._goCheck = {'name': member, 'visualization': parseBlockVisual(newMessages[member])}
 
@@ -291,13 +304,12 @@ class Team40Agent(BW4TBrain):
         return state
 
     def decide_on_bw4t_action(self, state: State):
-        agent_name = state[self.agent_id]['obj_id']
-
-        # Get goal objectives initially
         if self._isFirstAction:
+            self._agentName = state[self.agent_id]['obj_id']
+
             # Add team members
             for member in state['World']['team_members']:
-                if member != agent_name and member not in self._teamMembers:
+                if member != self._agentName and member not in self._teamMembers:
                     self._teamMembers.append(member)
 
             for member in self._teamMembers:
@@ -308,12 +320,19 @@ class Team40Agent(BW4TBrain):
                 self._memberObjects[member] = []
 
                 # Initialize target room per member
-                self._trustedMemberRoom[member] = None
+                self._memberRooms[member] = None
 
+            # Read goal objectives
             self._activeObjectives = [goal for goal in state.values()
                                       if 'is_goal_block' in goal and goal['is_goal_block']]
         self._isFirstAction = False
 
+        # Other members are on their way to finish the task
+        if len(state[self.agent_id]['is_carrying']) == 0 and self._goCheck is None and len(self._activeObjectives) == 0:
+            return None, {}
+
+        # Update member-room occupation status
+        self._updateMemberRoom()
         # Process messages from team members
         self._processMessages(self._teamMembers)
         newMessages = getNewMsg(self._oldMsg, self._latestMsg, self._teamMembers)
@@ -350,6 +369,8 @@ class Team40Agent(BW4TBrain):
                 if ind == -1:
                     self._updateTrustBy(self._goCheck['name'], -0.15)
                     self._phase = Phase.DECIDE_ACTION
+                    self._log(self._goCheck['name'] + ' - liar: false alarm')
+                    self._goCheck = None
                 else:
                     self._navigator.reset_full()
                     self._loc_goal = self._activeObjectives[ind]['location']
@@ -394,7 +415,7 @@ class Team40Agent(BW4TBrain):
             if Phase.DROP_OBJECT == self._phase:
                 self._phase = Phase.DECIDE_ACTION
                 self._sendMessage('Dropped goal block ' + str(self._carrying[0]['visualization']) +
-                                  ' at location ' + str(self._dropInfo), agent_name)
+                                  ' at location ' + str(self._dropInfo), self._agentName)
                 self._dropInfo = None
                 return DropObject.__name__, {'object_id': self._carrying[0]['obj_id']}
 
@@ -407,9 +428,9 @@ class Team40Agent(BW4TBrain):
 
                 # Remove doors that trusted members are visiting
                 for member in self._teamMembers:
-                    if self._trustedMemberRoom[member] is not None:
+                    if self._memberRooms[member] is not None:
                         for cd in closedDoors:
-                            if cd['room_name'] == self._trustedMemberRoom[member]:
+                            if cd['room_name'] == self._memberRooms[member]['room']:
                                 self._log(member + ' is visiting ' + cd['room_name'] + ', removing')
                                 closedDoors.remove(cd)
 
@@ -419,7 +440,7 @@ class Team40Agent(BW4TBrain):
                 # Location in front of door is south from door
                 doorLoc = doorLoc[0], doorLoc[1]+1
                 # Send message of current action
-                self._sendMessage('Moving to ' + self._door['room_name'], agent_name)
+                self._sendMessage('Moving to ' + self._door['room_name'], self._agentName)
                 self._navigator.add_waypoints([doorLoc])
                 self._phase = Phase.FOLLOW_PATH_TO_ROOM
 
@@ -434,7 +455,7 @@ class Team40Agent(BW4TBrain):
             if Phase.OPEN_DOOR == self._phase:
                 self._phase = Phase.INITIATE_ROOM_SEARCH
                 # Open door
-                self._sendMessage('Opening door of ' + self._door['room_name'], agent_name)
+                self._sendMessage('Opening door of ' + self._door['room_name'], self._agentName)
                 return OpenDoorAction.__name__, {'object_id': self._door['obj_id']}
 
             if Phase.INITIATE_ROOM_SEARCH == self._phase:
@@ -442,7 +463,7 @@ class Team40Agent(BW4TBrain):
                 doorLoc = self._door['location']
                 waypoints = [(doorLoc[0], doorLoc[1]-1), (doorLoc[0], doorLoc[1]-2), (doorLoc[0]-1, doorLoc[1]-2), (doorLoc[0]-1, doorLoc[1]-1)]
                 self._navigator.add_waypoints(waypoints)
-                self._sendMessage('Searching through ' + self._door['room_name'], agent_name)
+                self._sendMessage('Searching through ' + self._door['room_name'], self._agentName)
                 self._roomIsUseless = True
                 self._phase = Phase.SEARCH_ROOM
 
@@ -462,7 +483,7 @@ class Team40Agent(BW4TBrain):
                     self._phase = Phase.FOUND_BLOCK
                     self._sendMessage('Found goal block ' + str(self._searched_obj['visualization'])
                                       + ' at location ' + str(self._searched_obj['location']),
-                                      agent_name)
+                                      self._agentName)
                 else:
                     action = self._navigator.get_move_action(self._state_tracker)
                     if action is not None:
@@ -478,7 +499,7 @@ class Team40Agent(BW4TBrain):
                 self._phase = Phase.EXIT_ROOM
                 self._sendMessage('Picking up goal block ' + str(self._searched_obj['visualization'])
                                   + ' at location ' + str(self._searched_obj['location']),
-                                  agent_name)
+                                  self._agentName)
                 ind = indexObjEquals(self._activeObjectives, self._searched_obj)
                 self._dropInfo = self._activeObjectives[ind]['location']
                 self._activeObjectives.pop(0)
@@ -499,4 +520,4 @@ class Team40Agent(BW4TBrain):
 
     def _log(self, msg):
         if self._doLog:
-            print(msg)
+            print(self._agentName + ': ' + msg)
