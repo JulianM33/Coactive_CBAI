@@ -1,6 +1,6 @@
 from bw4t.BW4TWorld import BW4TWorld
 from bw4t.statistics import Statistics
-from agents1.Team40Agent import Team40Agent
+from agents1.Team40Agent import Team40Agent, Liar
 from agents1.BW4THuman import Human
 
 
@@ -12,9 +12,9 @@ press the start button in god mode to start the session.
 if __name__ == "__main__":
     agents = [
         {'name': 'agent1', 'botclass': Team40Agent, 'settings': {'do_log': True}},
-        {'name': 'agent2', 'botclass': Team40Agent, 'settings': {'do_log': True}},
-        {'name': 'agent3', 'botclass': Team40Agent, 'settings': {'do_log': True}},
-        {'name': 'agent4', 'botclass': Team40Agent, 'settings': {'do_log': True}}
+        {'name': 'agent2', 'botclass': Liar, 'settings': {}},
+        #{'name': 'agent3', 'botclass': Team40Agent, 'settings': {'do_log': True}},
+        #{'name': 'agent4', 'botclass': Team40Agent, 'settings': {'do_log': True}}
         #{'name': 'agent5', 'botclass': Team40Agent, 'settings': {'do_log': True}}
         ]
 
