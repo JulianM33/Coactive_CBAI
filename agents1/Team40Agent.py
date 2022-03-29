@@ -208,9 +208,11 @@ class Team40Agent(BW4TBrain):
                 self._memberObjects[member].append(parseBlockVisual(message))
             if len(self._memberObjects[member]) > 2:
                 self._updateTrustBy(member, -0.2)
+                self._log(member + ' - liar: carrying too much')
                 continue
             if 'Dropped goal block {' in message:
                 if len(self._memberObjects[member]) <= 0:
+                    self._log(member + ' - liar: dropping when not carrying anything')
                     self._updateTrustBy(member, -0.2)
                     continue
                 vis = parseBlockVisual(message)
@@ -221,6 +223,7 @@ class Team40Agent(BW4TBrain):
                         found = True
                         break
                 if not found:
+                    self._log(member + ' - liar: dropping block not in possession')
                     self._updateTrustBy(member, -0.2)
                     continue
 
@@ -228,25 +231,25 @@ class Team40Agent(BW4TBrain):
             if 'Opening door of' in message:
                 if ('Moving to ' + removePrefix('Opening door of ', message)) not in self._msgHist[member]:
                     self._updateTrustBy(member, -0.2)
-                    self._log(member + ' - lie: opening without moving')
+                    self._log(member + ' - liar: opening without moving')
                     continue
             if 'Searching through' in message:
                 if ('Moving to ' + removePrefix('Searching through ', message)) not in self._msgHist[member]:
                     self._updateTrustBy(member, -0.2)
-                    self._log(member + ' - lie: searching without moving')
+                    self._log(member + ' - liar: searching without moving')
                     continue
             if 'Found goal' in message and not self._histHasSub(member, 'Searching through'):  # TODO: improve this
                 self._updateTrustBy(member, -0.2)
-                self._log(member + ' - lie: found without searching')
+                self._log(member + ' - liar: found without searching')
                 continue
             if 'Picking' in message:
                 if not self._histHasSub(member, 'Moving') or not self._histHasSub(member, 'Searching'):
                     self._updateTrustBy(member, -0.2)
-                    self._log(member + ' - lie: picking without searching or moving')
+                    self._log(member + ' - liar: picking without searching or moving')
                     continue
             if 'Dropped' in message and not self._histHasSub(member, 'Picking'):
                 self._updateTrustBy(member, -0.2)
-                self._log(member + ' - lie: dropping without picking')
+                self._log(member + ' - liar: dropping without picking')
                 continue
 
             # Check order of messages
@@ -717,9 +720,11 @@ class LazyAgent(BW4TBrain):
                 self._memberObjects[member].append(parseBlockVisual(message))
             if len(self._memberObjects[member]) > 2:
                 self._updateTrustBy(member, -0.2)
+                self._log(member + ' - liar: carrying too much')
                 continue
             if 'Dropped goal block {' in message:
                 if len(self._memberObjects[member]) <= 0:
+                    self._log(member + ' - liar: dropping when not carrying anything')
                     self._updateTrustBy(member, -0.2)
                     continue
                 vis = parseBlockVisual(message)
@@ -730,6 +735,7 @@ class LazyAgent(BW4TBrain):
                         found = True
                         break
                 if not found:
+                    self._log(member + ' - liar: dropping block not in possession')
                     self._updateTrustBy(member, -0.2)
                     continue
 
@@ -737,25 +743,25 @@ class LazyAgent(BW4TBrain):
             if 'Opening door of' in message:
                 if ('Moving to ' + removePrefix('Opening door of ', message)) not in self._msgHist[member]:
                     self._updateTrustBy(member, -0.2)
-                    self._log(member + ' - lie: opening without moving')
+                    self._log(member + ' - liar: opening without moving')
                     continue
             if 'Searching through' in message:
                 if ('Moving to ' + removePrefix('Searching through ', message)) not in self._msgHist[member]:
                     self._updateTrustBy(member, -0.2)
-                    self._log(member + ' - lie: searching without moving')
+                    self._log(member + ' - liar: searching without moving')
                     continue
             if 'Found goal' in message and not self._histHasSub(member, 'Searching through'):  # TODO: improve this
                 self._updateTrustBy(member, -0.2)
-                self._log(member + ' - lie: found without searching')
+                self._log(member + ' - liar: found without searching')
                 continue
             if 'Picking' in message:
                 if not self._histHasSub(member, 'Moving') or not self._histHasSub(member, 'Searching'):
                     self._updateTrustBy(member, -0.2)
-                    self._log(member + ' - lie: picking without searching or moving')
+                    self._log(member + ' - liar: picking without searching or moving')
                     continue
             if 'Dropped' in message and not self._histHasSub(member, 'Picking'):
                 self._updateTrustBy(member, -0.2)
-                self._log(member + ' - lie: dropping without picking')
+                self._log(member + ' - liar: dropping without picking')
                 continue
 
             # Check order of messages
@@ -764,13 +770,13 @@ class LazyAgent(BW4TBrain):
 
                 # Lazy agent - not searching room after opening
                 if 'Opening' in oldMsg and 'Searching' not in message:
-                    self._updateTrustBy(member, -0.1)
+                    self._updateTrustBy(member, -0.12)
                     self._log(member + ' - lazy: not searching after opening')
                     continue
                 # Lazy agent - not picking up although not carrying anything
                 if 'Found' in oldMsg and 'Picking' not in message:
                     if self._histHasSub(member, 'Picking'):
-                        self._updateTrustBy(member, -0.1)
+                        self._updateTrustBy(member, -0.15)
                         self._log(member + ' - lazy: not picking after finding')
                         continue
 
@@ -1296,9 +1302,11 @@ class LiarAgent(BW4TBrain):
                 self._memberObjects[member].append(parseBlockVisual(message))
             if len(self._memberObjects[member]) > 2:
                 self._updateTrustBy(member, -0.2)
+                self._log(member + ' - liar: carrying too much')
                 continue
             if 'Dropped goal block {' in message:
                 if len(self._memberObjects[member]) <= 0:
+                    self._log(member + ' - liar: dropping when not carrying anything')
                     self._updateTrustBy(member, -0.2)
                     continue
                 vis = parseBlockVisual(message)
@@ -1309,6 +1317,7 @@ class LiarAgent(BW4TBrain):
                         found = True
                         break
                 if not found:
+                    self._log(member + ' - liar: dropping block not in possession')
                     self._updateTrustBy(member, -0.2)
                     continue
 
@@ -1316,25 +1325,25 @@ class LiarAgent(BW4TBrain):
             if 'Opening door of' in message:
                 if ('Moving to ' + removePrefix('Opening door of ', message)) not in self._msgHist[member]:
                     self._updateTrustBy(member, -0.2)
-                    self._log(member + ' - lie: opening without moving')
+                    self._log(member + ' - liar: opening without moving')
                     continue
             if 'Searching through' in message:
                 if ('Moving to ' + removePrefix('Searching through ', message)) not in self._msgHist[member]:
                     self._updateTrustBy(member, -0.2)
-                    self._log(member + ' - lie: searching without moving')
+                    self._log(member + ' - liar: searching without moving')
                     continue
             if 'Found goal' in message and not self._histHasSub(member, 'Searching through'):  # TODO: improve this
                 self._updateTrustBy(member, -0.2)
-                self._log(member + ' - lie: found without searching')
+                self._log(member + ' - liar: found without searching')
                 continue
             if 'Picking' in message:
                 if not self._histHasSub(member, 'Moving') or not self._histHasSub(member, 'Searching'):
                     self._updateTrustBy(member, -0.2)
-                    self._log(member + ' - lie: picking without searching or moving')
+                    self._log(member + ' - liar: picking without searching or moving')
                     continue
             if 'Dropped' in message and not self._histHasSub(member, 'Picking'):
                 self._updateTrustBy(member, -0.2)
-                self._log(member + ' - lie: dropping without picking')
+                self._log(member + ' - liar: dropping without picking')
                 continue
 
             # Check order of messages
@@ -1343,13 +1352,13 @@ class LiarAgent(BW4TBrain):
 
                 # Lazy agent - not searching room after opening
                 if 'Opening' in oldMsg and 'Searching' not in message:
-                    self._updateTrustBy(member, -0.1)
+                    self._updateTrustBy(member, -0.12)
                     self._log(member + ' - lazy: not searching after opening')
                     continue
                 # Lazy agent - not picking up although not carrying anything
                 if 'Found' in oldMsg and 'Picking' not in message:
                     if self._histHasSub(member, 'Picking'):
-                        self._updateTrustBy(member, -0.1)
+                        self._updateTrustBy(member, -0.15)
                         self._log(member + ' - lazy: not picking after finding')
                         continue
 
