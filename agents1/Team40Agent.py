@@ -258,7 +258,7 @@ class Team40Agent(BW4TBrain):
 
                 # Lazy agent - not searching room after opening
                 if 'Opening' in oldMsg and 'Searching' not in message:
-                    self._updateTrustBy(member, -0.12)
+                    self._updateTrustBy(member, -0.15)
                     self._log(member + ' - lazy: not searching after opening')
                     continue
                 # Lazy agent - not picking up although not carrying anything
@@ -271,7 +271,7 @@ class Team40Agent(BW4TBrain):
                 # Normal cases - Check if room is consistent
                 if 'Moving to' in oldMsg and 'Opening door of' in message:
                     if removePrefix('Moving to ', oldMsg) == removePrefix('Opening door of ', message):
-                        self._updateTrustBy(member, 0.03)
+                        self._updateTrustBy(member, 0.02)
                         # self._log(member + ' - legit move: moved to -> open door')
                         continue
                 if 'Opening door of' in oldMsg and 'Searching through' in message:
@@ -282,16 +282,16 @@ class Team40Agent(BW4TBrain):
                 if 'Found goal block' in oldMsg and 'Picking up goal block' in message:
                     if parseLocation(oldMsg) == parseLocation(message):
                         if parseBlockVisual(oldMsg) == parseBlockVisual(message):
-                            self._updateTrustBy(member, 0.07)
+                            self._updateTrustBy(member, 0.04)
                             # self._log(member + ' - legit move: find -> pick up')
                             continue
                 if 'Picking up goal block' in oldMsg and 'Dropped goal block' in message:
                     if parseBlockVisual(oldMsg) == parseBlockVisual(message):
-                        self._updateTrustBy(member, 0.07)
+                        self._updateTrustBy(member, 0.05)
                         # self._log(member + ' - legit move: pick up -> drop off')
                         continue
                 if 'Dropped goal block' in oldMsg and 'Moving to' in message:
-                    self._updateTrustBy(member, 0.07)
+                    self._updateTrustBy(member, 0.06)
                     # self._log(member + ' - legit move: drop off -> move to')
                     continue
 
@@ -770,7 +770,7 @@ class LazyAgent(BW4TBrain):
 
                 # Lazy agent - not searching room after opening
                 if 'Opening' in oldMsg and 'Searching' not in message:
-                    self._updateTrustBy(member, -0.12)
+                    self._updateTrustBy(member, -0.15)
                     self._log(member + ' - lazy: not searching after opening')
                     continue
                 # Lazy agent - not picking up although not carrying anything
@@ -783,7 +783,7 @@ class LazyAgent(BW4TBrain):
                 # Normal cases - Check if room is consistent
                 if 'Moving to' in oldMsg and 'Opening door of' in message:
                     if removePrefix('Moving to ', oldMsg) == removePrefix('Opening door of ', message):
-                        self._updateTrustBy(member, 0.03)
+                        self._updateTrustBy(member, 0.02)
                         # self._log(member + ' - legit move: moved to -> open door')
                         continue
                 if 'Opening door of' in oldMsg and 'Searching through' in message:
@@ -794,16 +794,16 @@ class LazyAgent(BW4TBrain):
                 if 'Found goal block' in oldMsg and 'Picking up goal block' in message:
                     if parseLocation(oldMsg) == parseLocation(message):
                         if parseBlockVisual(oldMsg) == parseBlockVisual(message):
-                            self._updateTrustBy(member, 0.07)
+                            self._updateTrustBy(member, 0.04)
                             # self._log(member + ' - legit move: find -> pick up')
                             continue
                 if 'Picking up goal block' in oldMsg and 'Dropped goal block' in message:
                     if parseBlockVisual(oldMsg) == parseBlockVisual(message):
-                        self._updateTrustBy(member, 0.07)
+                        self._updateTrustBy(member, 0.05)
                         # self._log(member + ' - legit move: pick up -> drop off')
                         continue
                 if 'Dropped goal block' in oldMsg and 'Moving to' in message:
-                    self._updateTrustBy(member, 0.07)
+                    self._updateTrustBy(member, 0.06)
                     # self._log(member + ' - legit move: drop off -> move to')
                     continue
 
@@ -1352,7 +1352,7 @@ class LiarAgent(BW4TBrain):
 
                 # Lazy agent - not searching room after opening
                 if 'Opening' in oldMsg and 'Searching' not in message:
-                    self._updateTrustBy(member, -0.12)
+                    self._updateTrustBy(member, -0.15)
                     self._log(member + ' - lazy: not searching after opening')
                     continue
                 # Lazy agent - not picking up although not carrying anything
@@ -1365,7 +1365,7 @@ class LiarAgent(BW4TBrain):
                 # Normal cases - Check if room is consistent
                 if 'Moving to' in oldMsg and 'Opening door of' in message:
                     if removePrefix('Moving to ', oldMsg) == removePrefix('Opening door of ', message):
-                        self._updateTrustBy(member, 0.03)
+                        self._updateTrustBy(member, 0.02)
                         # self._log(member + ' - legit move: moved to -> open door')
                         continue
                 if 'Opening door of' in oldMsg and 'Searching through' in message:
@@ -1376,16 +1376,16 @@ class LiarAgent(BW4TBrain):
                 if 'Found goal block' in oldMsg and 'Picking up goal block' in message:
                     if parseLocation(oldMsg) == parseLocation(message):
                         if parseBlockVisual(oldMsg) == parseBlockVisual(message):
-                            self._updateTrustBy(member, 0.07)
+                            self._updateTrustBy(member, 0.04)
                             # self._log(member + ' - legit move: find -> pick up')
                             continue
                 if 'Picking up goal block' in oldMsg and 'Dropped goal block' in message:
                     if parseBlockVisual(oldMsg) == parseBlockVisual(message):
-                        self._updateTrustBy(member, 0.07)
+                        self._updateTrustBy(member, 0.05)
                         # self._log(member + ' - legit move: pick up -> drop off')
                         continue
                 if 'Dropped goal block' in oldMsg and 'Moving to' in message:
-                    self._updateTrustBy(member, 0.07)
+                    self._updateTrustBy(member, 0.06)
                     # self._log(member + ' - legit move: drop off -> move to')
                     continue
 
