@@ -307,7 +307,7 @@ class Team40Agent(BW4TBrain):
             if newMessages[member] is not None:
 
                 # A member is visiting a room
-                if 'Moving to' in newMessages[member] and self._trustPerMember[member] >= 0.5:
+                if 'Moving to' in newMessages[member] and self._trustPerMember[member] >= 0.4:
                     self._memberRooms[member] = {'room': removePrefix('Moving to ', newMessages[member]),
                                                  'duration': int(round(self._trustPerMember[member] * 20, 0))}
 
@@ -318,9 +318,10 @@ class Team40Agent(BW4TBrain):
                     ind = indexObjStrEquals(self._activeObjectives, parseBlockVisual(newMessages[member]))
                     for i in range(len(self._activeObjectives)):
                         if i <= ind:
-                            if len(self._activeObjectives) == 0:
-                                break
-                            self._activeObjectives.pop(i)
+                            try:
+                                self._activeObjectives.pop(i)
+                            except:
+                                pass
                     self._log(member + ' is picking up a goal block, updating active list')
 
                 # Iffy member dropped a block
@@ -482,7 +483,7 @@ class Team40Agent(BW4TBrain):
                     self._log(self._verifyMemberDrop['name'] + ' - legit move: actually dropped at goal')
                 else:
                     self._updateTrustBy(self._verifyMemberDrop['name'], -0.3)
-                    self._log(self._verifyMemberDrop['name' + ' - liar: false alarm'])
+                    self._log(self._verifyMemberDrop['name'] + ' - liar: false alarm')
                 self._verifyMemberDrop = None
                 self._phase = Phase.DECIDE_ACTION
 
@@ -518,7 +519,7 @@ class Team40Agent(BW4TBrain):
                     if self._memberRooms[member] is not None:
                         for cd in closedDoors:
                             if cd['room_name'] == self._memberRooms[member]['room']:
-                                self._log(member + ' is visiting ' + cd['room_name'] + ', removing')
+                                # self._log(member + ' is visiting ' + cd['room_name'] + ', removing')
                                 closedDoors.remove(cd)
 
                 # Randomly pick a closed door
@@ -616,4 +617,4 @@ class Team40Agent(BW4TBrain):
 
     def _log(self, msg):
         if self._doLog:
-            print(self._agentName + ': ' + msg + ' ::: Trusts: ' + str(self._trustPerMember))
+            print(self._agentName + ': ' + msg + ' :::  ' + str(len(self._activeObjectives)))
