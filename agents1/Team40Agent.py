@@ -23,7 +23,10 @@ class Phase(enum.Enum):
     EXIT_ROOM = 11,
     VERIFY_DROP = 12,
     FOLLOW_PATH_TO_VERIFY = 13,
-    VERIFY = 14
+    VERIFY = 14,
+    UPDATE_OBJ = 15,
+    FOLLOW_PATH_TO_UPDATE = 16,
+    UPDATE = 17
 
 def removePrefix(pre, message):
     if message.startswith(pre):
@@ -53,6 +56,19 @@ def indexObjsEquals(objList1, objList2):
                 return i, j
     return -1, -1
 
+def indexObjStrEquals(objList, objStr):
+    for i in range(len(objList)):
+        vis = objList[i]['visualization']
+        if str(vis['shape']) in objStr and vis['colour'] in objStr:
+            return i
+    return -1
+
+def indexLocEquals(objList, obj):
+    for i in range(len(objList)):
+        if objList[i]['location'] == obj['location']:
+            return i
+    return -1
+
 def hasCommon(li1, li2):
     for obj1 in li1:
         for obj2 in li2:
@@ -70,13 +86,6 @@ def objEquals(obj1, obj2):
         return False
     return True
 
-def indexObjStrEquals(objList, objStr):
-    for i in range(len(objList)):
-        vis = objList[i]['visualization']
-        if str(vis['shape']) in objStr and vis['colour'] in objStr:
-            return i
-    return -1
-
 def getNewMsg(old, latest, members):
     newMessages = {}
     for member in members:
@@ -93,7 +102,8 @@ class Team40Agent(BW4TBrain):
         self._agentName = None
         self._isFirstAction = True
         self._phase = Phase.DECIDE_ACTION
-        self._goCheck = None
+        self._verifyMemberDrop = None
+        self._updateObjectives = False
         self._state_tracker = None
         self._navigator = None
         self._dropInfo = None
@@ -302,7 +312,7 @@ class Team40Agent(BW4TBrain):
 
                 # Iffy member dropped a block
                 if 'Dropped goal block' in newMessages[member] and 0.3 < self._trustPerMember[member] < 0.9:
-                    self._goCheck = {'name': member, 'visualization': parseBlockVisual(newMessages[member])}
+                    self._verifyMemberDrop = {'name': member, 'visualization': parseBlockVisual(newMessages[member])}
 
     def filter_bw4t_observations(self, state):
         return state
@@ -332,7 +342,7 @@ class Team40Agent(BW4TBrain):
         self._isFirstAction = False
 
         # Other members are on their way to finish the task
-        if len(state[self.agent_id]['is_carrying']) == 0 and self._goCheck is None and len(self._activeObjectives) == 0:
+        if len(state[self.agent_id]['is_carrying']) == 0 and self._verifyMemberDrop is None and len(self._activeObjectives) == 0:
             return None, {}
 
         # Update member-room occupation status
@@ -356,8 +366,13 @@ class Team40Agent(BW4TBrain):
                 if len(self._carrying) != 0:
                     self._phase = Phase.PLAN_PATH_TO_DROP_OBJECT
 
-                elif self._goCheck is not None:
+                # Queued to verify other member's drop
+                elif self._verifyMemberDrop is not None:
                     self._phase = Phase.VERIFY_DROP
+
+                # If not alone, randomly choose to update list of objectives
+                #elif len(self._teamMembers) > 0 and (self._updateObjectives or random.randint(0, 7) == 0):
+                #    self._phase = Phase.UPDATE_OBJ
 
                 # Still have to look for goal objects
                 elif len(self._activeObjectives) != 0:
@@ -367,18 +382,64 @@ class Team40Agent(BW4TBrain):
                 else:
                     return None, {}
 
+            if Phase.UPDATE_OBJ == self._phase:
+                self._log('updating objective list')
+                self._navigator.reset_full()
+                self._allObjectives = [goal for goal in state.values()
+                                       if 'is_goal_block' in goal and goal['is_goal_block']]
+                self._loc_goal = self._allObjectives[0]['location']
+                self._navigator.add_waypoint(self._loc_goal)
+                self._phase = Phase.FOLLOW_PATH_TO_UPDATE
+
+            if Phase.FOLLOW_PATH_TO_UPDATE == self._phase:
+                self._state_tracker.update(state)
+                action = self._navigator.get_move_action(self._state_tracker)
+                if action is not None:
+                    return action, {}
+                self._phase = Phase.UPDATE
+
+            if Phase.UPDATE == self._phase:
+                if len(self._allObjectives) == 0:
+                    self._phase = Phase.DECIDE_ACTION
+                else:
+                    nearby_objects = [obj for obj in state.values() if 'is_collectable' in obj and obj['is_collectable']]
+                    ind = indexLocEquals(nearby_objects, self._allObjectives[0])
+                    if ind == -1:
+                        self._phase = Phase.DECIDE_ACTION
+                    else:
+                        if objEquals(nearby_objects[ind], self._allObjectives[0]):
+                            if len(self._activeObjectives) == 0:
+                                self._phase = Phase.DECIDE_ACTION
+                                self._updateObjectives = False
+                                return None, {}
+                            ind = indexObjEquals(self._activeObjectives, nearby_objects[ind])
+                            for i in range(len(self._activeObjectives)):
+                                if i <= ind:
+                                    if len(self._activeObjectives) == 0:
+                                        break
+                                    self._activeObjectives.pop(i)
+                            self._allObjectives.pop(0)
+                            if len(self._allObjectives) == 0:
+                                self._phase = Phase.DECIDE_ACTION
+                            if len(self._allObjectives) > 0:
+                                self._navigator.reset_full()
+                                self._navigator.add_waypoint(self._allObjectives[0])
+                                self._phase = Phase.FOLLOW_PATH_TO_UPDATE
+                        else:
+                            self._phase = Phase.DECIDE_ACTION
+
             if Phase.VERIFY_DROP == self._phase:
-                self._log('checking if ' + self._goCheck['name'] + ' actually dropped at goal')
+                self._log('checking if ' + self._verifyMemberDrop['name'] + ' actually dropped at goal')
                 if len(self._activeObjectives) == 0:
-                    self._goCheck = None
+                    self._verifyMemberDrop = None
                     self._phase = Phase.DECIDE_ACTION
                     return None, {}
-                ind = indexObjStrEquals(self._activeObjectives, self._goCheck['visualization'])
+                ind = indexObjStrEquals(self._activeObjectives, self._verifyMemberDrop['visualization'])
                 if ind == -1:
-                    self._updateTrustBy(self._goCheck['name'], -0.15)
+                    self._updateTrustBy(self._verifyMemberDrop['name'], -0.15)
                     self._phase = Phase.DECIDE_ACTION
-                    self._log(self._goCheck['name'] + ' - liar: false alarm')
-                    self._goCheck = None
+                    self._log(self._verifyMemberDrop['name'] + ' - liar: false alarm')
+                    self._verifyMemberDrop = None
                 else:
                     self._navigator.reset_full()
                     self._loc_goal = self._activeObjectives[ind]['location']
@@ -394,22 +455,22 @@ class Team40Agent(BW4TBrain):
 
             if Phase.VERIFY == self._phase:
                 nearby_objects = [obj for obj in state.values() if 'is_collectable' in obj and obj['is_collectable']]
-                ind = indexObjStrEquals(nearby_objects, self._goCheck['visualization'])
+                ind = indexObjStrEquals(nearby_objects, self._verifyMemberDrop['visualization'])
                 if len(self._activeObjectives) == 0:
-                    self._goCheck = None
+                    self._verifyMemberDrop = None
                     self._phase = Phase.DECIDE_ACTION
                     return None, {}
                 if ind != -1 and nearby_objects[ind]['location'] == self._loc_goal:
-                    self._updateTrustBy(self._goCheck['name'], 0.2)
-                    ind = indexObjStrEquals(self._activeObjectives, self._goCheck['visualization'])
+                    self._updateTrustBy(self._verifyMemberDrop['name'], 0.2)
+                    ind = indexObjStrEquals(self._activeObjectives, self._verifyMemberDrop['visualization'])
                     for i in range(len(self._activeObjectives)):
                         if i <= ind:
                             self._activeObjectives.pop(i)
-                    self._log(self._goCheck['name'] + ' - legit move: actually dropped at goal')
+                    self._log(self._verifyMemberDrop['name'] + ' - legit move: actually dropped at goal')
                 else:
-                    self._updateTrustBy(self._goCheck['name'], -0.3)
-                    self._log(self._goCheck['name' + ' - liar: false alarm'])
-                self._goCheck = None
+                    self._updateTrustBy(self._verifyMemberDrop['name'], -0.3)
+                    self._log(self._verifyMemberDrop['name' + ' - liar: false alarm'])
+                self._verifyMemberDrop = None
                 self._phase = Phase.DECIDE_ACTION
 
             if Phase.PLAN_PATH_TO_DROP_OBJECT == self._phase:
