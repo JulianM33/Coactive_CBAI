@@ -110,7 +110,6 @@ class Team40Agent(BW4TBrain):
         self._isFirstAction = True
         self._phase = Phase.DECIDE_ACTION
         self._verifyMemberDrop = None
-        self._updateObjectives = False
         self._state_tracker = None
         self._navigator = None
         self._dropInfo = None
@@ -316,12 +315,7 @@ class Team40Agent(BW4TBrain):
                     if len(self._activeObjectives) == 0:
                         continue
                     ind = indexObjStrEquals(self._activeObjectives, parseBlockVisual(newMessages[member]))
-                    for i in range(len(self._activeObjectives)):
-                        if i <= ind:
-                            try:
-                                self._activeObjectives.pop(i)
-                            except:
-                                pass
+                    self._activeObjectives = self._activeObjectives[ind+1:]
                     self._log(member + ' is picking up a goal block, updating active list')
 
                 # Iffy member dropped a block
@@ -391,7 +385,7 @@ class Team40Agent(BW4TBrain):
                     self._phase = Phase.VERIFY_DROP
 
                 # If not alone, randomly choose to update list of objectives
-                elif len(self._teamMembers) > 0 and (self._updateObjectives or random.randint(0, 10) == 0):
+                elif len(self._teamMembers) > 0 and random.randint(0, 10) == 0:
                     self._phase = Phase.UPDATE_OBJ
 
                 # Still have to look for goal objects
@@ -404,7 +398,6 @@ class Team40Agent(BW4TBrain):
 
             if Phase.UPDATE_OBJ == self._phase:
                 self._log('updating objective list')
-                self._updateObjectives = False
                 self._navigator.reset_full()
                 self._allObjectives = [goal for goal in state.values()
                                        if 'is_goal_block' in goal and goal['is_goal_block']]
@@ -440,10 +433,10 @@ class Team40Agent(BW4TBrain):
                         else:
                             self._phase = Phase.DECIDE_ACTION
                 self._activeObjectives = self._allObjectives
+                self._log('updated active list')
 
             if Phase.VERIFY_DROP == self._phase:
-                self._log('checking if ' + self._verifyMemberDrop['name'] + ' actually dropped at goal')
-                self._updateObjectives = True
+                self._log('checking if ' + self._verifyMemberDrop['name'] + ' actually dropped at goal ::: ' + str(self._verifyMemberDrop))
                 self._allObjectives = [goal for goal in state.values()
                                        if 'is_goal_block' in goal and goal['is_goal_block']]
                 ind = indexLocStrAndObjStrEquals(self._allObjectives, self._verifyMemberDrop['visualization'],
@@ -485,10 +478,9 @@ class Team40Agent(BW4TBrain):
                     self._updateTrustBy(self._verifyMemberDrop['name'], -0.3)
                     self._log(self._verifyMemberDrop['name'] + ' - liar: false alarm')
                 self._verifyMemberDrop = None
-                self._phase = Phase.DECIDE_ACTION
+                self._phase = Phase.UPDATE_OBJ
 
             if Phase.PLAN_PATH_TO_DROP_OBJECT == self._phase:
-                self._updateObjectives = True
                 self._navigator.reset_full()
                 self._navigator.add_waypoint(self._dropInfo)
                 self._phase = Phase.FOLLOW_PATH_TO_DROP_OBJECT
@@ -501,7 +493,7 @@ class Team40Agent(BW4TBrain):
                 self._phase = Phase.DROP_OBJECT
 
             if Phase.DROP_OBJECT == self._phase:
-                self._phase = Phase.DECIDE_ACTION
+                self._phase = Phase.UPDATE_OBJ
                 self._sendMessage('Dropped goal block ' + str(self._carrying[0]['visualization']) +
                                   ' at location ' + str(self._dropInfo), self._agentName)
                 self._dropInfo = None
