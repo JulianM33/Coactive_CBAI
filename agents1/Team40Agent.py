@@ -33,8 +33,12 @@ def removePrefix(pre, message):
         return message[len(pre):]
 
 def parseLocation(message):
-    ind = message.index('at location')
-    return message[ind + len('at location '):]
+    try:
+        ind = message.index('at location')
+        return message[ind + len('at location '):]
+    except:
+        ind = message.index('at drop location')
+        return message[ind + len('at drop location '):]
 
 def parseBlockVisual(message):
     ind = message.index('{')
@@ -256,6 +260,11 @@ class Team40Agent(BW4TBrain):
             oldMsg = self._oldMsg[member]
             if oldMsg is not None and oldMsg != message:
 
+                # Lazy agent - not opening after moving
+                if 'Moving to' in oldMsg and 'Opening' not in message:
+                    self._updateTrustBy(member, -0.1)
+                    self._log(member + ' - lazy: not opening after moving')
+                    continue
                 # Lazy agent - not searching room after opening
                 if 'Opening' in oldMsg and 'Searching' not in message:
                     self._updateTrustBy(member, -0.15)
@@ -768,6 +777,11 @@ class LazyAgent(BW4TBrain):
             oldMsg = self._oldMsg[member]
             if oldMsg is not None and oldMsg != message:
 
+                # Lazy agent - not opening after moving
+                if 'Moving to' in oldMsg and 'Opening' not in message:
+                    self._updateTrustBy(member, -0.1)
+                    self._log(member + ' - lazy: not opening after moving')
+                    continue
                 # Lazy agent - not searching room after opening
                 if 'Opening' in oldMsg and 'Searching' not in message:
                     self._updateTrustBy(member, -0.15)
@@ -1350,6 +1364,11 @@ class LiarAgent(BW4TBrain):
             oldMsg = self._oldMsg[member]
             if oldMsg is not None and oldMsg != message:
 
+                # Lazy agent - not opening after moving
+                if 'Moving to' in oldMsg and 'Opening' not in message:
+                    self._updateTrustBy(member, -0.1)
+                    self._log(member + ' - lazy: not opening after moving')
+                    continue
                 # Lazy agent - not searching room after opening
                 if 'Opening' in oldMsg and 'Searching' not in message:
                     self._updateTrustBy(member, -0.15)
