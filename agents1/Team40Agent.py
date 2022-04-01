@@ -1,5 +1,5 @@
 
-from typing import final, List, Dict, Final
+from typing import Dict
 import enum, random, copy, csv, pandas
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
@@ -47,23 +47,23 @@ def parseBlockVisual(message):
         if tempMsg[charInd] == '}':
             return tempMsg[:charInd + 1]
 
-def indexObjEquals(objList, obj):
+def indexObjEquals(objList, obj, isCB=False):
     for i in range(len(objList)):
-        if objEquals(objList[i], obj):
+        if objEquals(objList[i], obj, isCB):
             return i
     return -1
 
-def indexObjsEquals(objList1, objList2):
+def indexObjsEquals(objList1, objList2, isCB=False):
     for i in range(len(objList1)):
         for j in range(len(objList2)):
-            if objEquals(objList1[i], objList2[j]):
+            if objEquals(objList1[i], objList2[j], isCB):
                 return i, j
     return -1, -1
 
-def indexObjStrEquals(objList, objStr):
+def indexObjStrEquals(objList, objStr, isCB=False):
     for i in range(len(objList)):
         vis = objList[i]['visualization']
-        if str(vis['shape']) in objStr and vis['colour'] in objStr:
+        if str(vis['shape']) in objStr and (not isCB and vis['colour'] in objStr):
             return i
     return -1
 
@@ -73,27 +73,27 @@ def indexLocEquals(objList, obj):
             return i
     return -1
 
-def indexLocStrAndObjStrEquals(objList, objStr, locStr):
+def indexLocStrAndObjStrEquals(objList, objStr, locStr, isCB=False):
     for i in range(len(objList)):
         vis = objList[i]['visualization']
-        if str(vis['shape']) in objStr and vis['colour'] in objStr and str(objList[i]['location']) == locStr:
+        if str(vis['shape']) in objStr and (not isCB and vis['colour'] in objStr) and str(objList[i]['location']) == locStr:
             return i
     return -1
 
-def hasCommon(li1, li2):
+def hasCommon(li1, li2, isCB=False):
     for obj1 in li1:
         for obj2 in li2:
-            if objEquals(obj1, obj2):
+            if objEquals(obj1, obj2, isCB):
                 return True
     return False
 
-def objEquals(obj1, obj2):
+def objEquals(obj1, obj2, isCB=False):
     ov1 = obj1['visualization']
     ov2 = obj2['visualization']
 
     if ov1['shape'] != ov2['shape']:
         return False
-    if ov1['colour'] != ov2['colour']:
+    if not isCB and ov1['colour'] != ov2['colour']:
         return False
     return True
 
@@ -222,6 +222,7 @@ class Team40Agent(BW4TBrain):
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
                 self._updateTrustBy(member, -0.1)
+                self._log(member + ' - colorblind: no description of color')
                 continue
 
             # Liar agent - picking/dropping objects
@@ -750,6 +751,7 @@ class ColorblindAgent(BW4TBrain):
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
                 self._updateTrustBy(member, -0.1)
+                self._log(member + ' - colorblind: no description of color')
                 continue
 
             # Liar agent - picking/dropping objects
@@ -871,7 +873,7 @@ class ColorblindAgent(BW4TBrain):
                 if 'Picking up' in newMessages[member] and self._trustPerMember[member] >= 0.9:
                     if len(self._activeObjectives) == 0:
                         continue
-                    ind = indexObjStrEquals(self._activeObjectives, parseBlockVisual(newMessages[member]))
+                    ind = indexObjStrEquals(self._activeObjectives, parseBlockVisual(newMessages[member]), isCB=True)
                     self._activeObjectives = self._activeObjectives[ind+1:]
                     self._log(member + ' is picking up a goal block, updating active list')
 
@@ -942,14 +944,11 @@ class ColorblindAgent(BW4TBrain):
 
         while True:
             if Phase.DECIDE_ACTION == self._phase:
-                self._carrying = state[self.agent_id]['is_carrying']
-
-                # Carrying something, go drop it
-                if len(self._carrying) != 0:
-                    self._phase = Phase.PLAN_PATH_TO_DROP_OBJECT
+                # self._carrying = state[self.agent_id]['is_carrying']
+                # the colorblind agent will not carry anything
 
                 # Queued to verify other member's drop
-                elif self._verifyMemberDrop is not None:
+                if self._verifyMemberDrop is not None:
                     self._phase = Phase.VERIFY_DROP
 
                 # If not alone, randomly choose to update list of objectives
@@ -1008,7 +1007,7 @@ class ColorblindAgent(BW4TBrain):
                 self._allObjectives = [goal for goal in state.values()
                                        if 'is_goal_block' in goal and goal['is_goal_block']]
                 ind = indexLocStrAndObjStrEquals(self._allObjectives, self._verifyMemberDrop['visualization'],
-                                                 self._verifyMemberDrop['location'])
+                                                 self._verifyMemberDrop['location'], isCB=True)
                 if ind == -1:
                     self._updateTrustBy(self._verifyMemberDrop['name'], -0.15)
                     self._phase = Phase.DECIDE_ACTION
@@ -1030,14 +1029,14 @@ class ColorblindAgent(BW4TBrain):
             if Phase.VERIFY == self._phase:
                 nearby_objects = [obj for obj in state.values() if 'is_collectable' in obj and obj['is_collectable']]
                 ind = indexLocStrAndObjStrEquals(nearby_objects, self._verifyMemberDrop['visualization'],
-                                                 self._verifyMemberDrop['location'])
+                                                 self._verifyMemberDrop['location'], isCB=True)
                 if len(self._activeObjectives) == 0:
                     self._verifyMemberDrop = None
                     self._phase = Phase.DECIDE_ACTION
                     return None, {}
                 elif ind != -1 and nearby_objects[ind]['location'] == self._loc_goal:
                     self._updateTrustBy(self._verifyMemberDrop['name'], 0.2)
-                    ind = indexObjStrEquals(self._activeObjectives, self._verifyMemberDrop['visualization'])
+                    ind = indexObjStrEquals(self._activeObjectives, self._verifyMemberDrop['visualization'], isCB=True)
                     for i in range(len(self._activeObjectives)):
                         if i <= ind:
                             self._activeObjectives.pop(i)
@@ -1047,25 +1046,6 @@ class ColorblindAgent(BW4TBrain):
                     self._log(self._verifyMemberDrop['name'] + ' - liar: false alarm')
                 self._verifyMemberDrop = None
                 self._phase = Phase.UPDATE_OBJ
-
-            if Phase.PLAN_PATH_TO_DROP_OBJECT == self._phase:
-                self._navigator.reset_full()
-                self._navigator.add_waypoint(self._dropInfo)
-                self._phase = Phase.FOLLOW_PATH_TO_DROP_OBJECT
-
-            if Phase.FOLLOW_PATH_TO_DROP_OBJECT == self._phase:
-                self._state_tracker.update(state)
-                action = self._navigator.get_move_action(self._state_tracker)
-                if action is not None:
-                    return action, {}
-                self._phase = Phase.DROP_OBJECT
-
-            if Phase.DROP_OBJECT == self._phase:
-                self._phase = Phase.UPDATE_OBJ
-                self._sendMessage('Dropped goal block ' + str(self._carrying[0]['visualization']) +
-                                  ' at location ' + str(self._dropInfo), self._agentName)
-                self._dropInfo = None
-                return DropObject.__name__, {'object_id': self._carrying[0]['obj_id']}
 
             if Phase.PLAN_PATH_TO_ROOM == self._phase:
                 self._navigator.reset_full()
@@ -1125,16 +1105,20 @@ class ColorblindAgent(BW4TBrain):
                 if len(self._activeObjectives) == 0:
                     self._phase = Phase.DECIDE_ACTION
                     return None, {}
-                objInd = indexObjEquals(nearby_objects, self._activeObjectives[0])
+                objInd = indexObjEquals(nearby_objects, self._activeObjectives[0], isCB=True)
 
-                if hasCommon(nearby_objects, self._activeObjectives):
+                if hasCommon(nearby_objects, self._activeObjectives, isCB=True):
                     self._roomIsUseless = False
 
                 if objInd != -1:
                     self._navigator.reset_full()
                     self._searched_obj = nearby_objects[objInd]
+                    # Remove color from visualization - unique to colorblind agent
+                    if 'colour' in self._searched_obj['visualization']:
+                        self._searched_obj['visualization'].pop('colour')
                     self._navigator.add_waypoint(self._searched_obj['location'])
-                    self._phase = Phase.FOUND_BLOCK
+                    # Do not pick up - unique to colorblind agent
+                    self._phase = Phase.EXIT_ROOM
                     self._sendMessage('Found goal block ' + str(self._searched_obj['visualization'])
                                       + ' at location ' + str(self._searched_obj['location']),
                                       self._agentName)
@@ -1143,24 +1127,6 @@ class ColorblindAgent(BW4TBrain):
                     if action is not None:
                         return action, {}
                     self._phase = Phase.EXIT_ROOM
-
-            if Phase.FOUND_BLOCK == self._phase:
-                self._state_tracker.update(state)
-
-                action = self._navigator.get_move_action(self._state_tracker)
-                if action is not None:
-                    return action, {}
-                self._phase = Phase.EXIT_ROOM
-                self._sendMessage('Picking up goal block ' + str(self._searched_obj['visualization'])
-                                  + ' at location ' + str(self._searched_obj['location']),
-                                  self._agentName)
-                if len(self._activeObjectives) == 0:
-                    self._phase = Phase.DECIDE_ACTION
-                    return None, {}
-                ind = indexObjEquals(self._activeObjectives, self._searched_obj)
-                self._dropInfo = self._activeObjectives[ind]['location']
-                self._activeObjectives.pop(0)
-                return GrabObject.__name__, {'object_id': self._searched_obj['obj_id']}
 
             if Phase.EXIT_ROOM == self._phase:
                 self._navigator.reset_full()
@@ -1278,6 +1244,7 @@ class LazyAgent(BW4TBrain):
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
                 self._updateTrustBy(member, -0.1)
+                self._log(member + ' - colorblind: no description of color')
                 continue
 
             # Liar agent - picking/dropping objects
@@ -1876,6 +1843,7 @@ class LiarAgent(BW4TBrain):
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
                 self._updateTrustBy(member, -0.1)
+                self._log(member + ' - colorblind: no description of color')
                 continue
 
             # Liar agent - picking/dropping objects
