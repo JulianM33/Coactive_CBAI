@@ -221,7 +221,7 @@ class Team40Agent(BW4TBrain):
 
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
-                self._updateTrustBy(member, -0.1)
+                self._updateTrustBy(member, -0.15)
                 self._log(member + ' - colorblind: no description of color')
                 continue
 
@@ -750,7 +750,7 @@ class ColorblindAgent(BW4TBrain):
 
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
-                self._updateTrustBy(member, -0.1)
+                self._updateTrustBy(member, -0.15)
                 self._log(member + ' - colorblind: no description of color')
                 continue
 
@@ -1243,7 +1243,7 @@ class LazyAgent(BW4TBrain):
 
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
-                self._updateTrustBy(member, -0.1)
+                self._updateTrustBy(member, -0.15)
                 self._log(member + ' - colorblind: no description of color')
                 continue
 
@@ -1842,7 +1842,7 @@ class LiarAgent(BW4TBrain):
 
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
-                self._updateTrustBy(member, -0.1)
+                self._updateTrustBy(member, -0.15)
                 self._log(member + ' - colorblind: no description of color')
                 continue
 
