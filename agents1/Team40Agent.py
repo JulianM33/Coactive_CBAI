@@ -2269,7 +2269,7 @@ class LazyAgent(BW4TBrain):
 
     def _log(self, msg):
         if self._doLog:
-            print(self._agentName + ': ' + msg + ' :::  ' + str(len(self._activeObjectives)))
+            print(self._agentName + ': ' + msg + ' :::  ' + str(self._trustPerMember))
 
 class LiarAgent(BW4TBrain):
 
@@ -2868,4 +2868,4 @@ class LiarAgent(BW4TBrain):
 
     def _log(self, msg):
         if self._doLog:
-            print(self._agentName + ': ' + msg + ' :::  ' + str(len(self._activeObjectives)))
+            print(self._agentName + ': ' + msg + ' :::  ' + str(self._trustPerMember))
