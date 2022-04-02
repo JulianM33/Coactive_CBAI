@@ -63,7 +63,7 @@ def indexObjsEquals(objList1, objList2, isCB=False):
 def indexObjStrEquals(objList, objStr, isCB=False):
     for i in range(len(objList)):
         vis = objList[i]['visualization']
-        if str(vis['shape']) in objStr and (isCB or vis['colour'] in objStr):
+        if ("'shape': " + str(vis['shape'])) in objStr and (isCB or vis['colour'] in objStr):
             return i
     return -1
 
@@ -76,7 +76,7 @@ def indexLocEquals(objList, obj):
 def indexLocStrAndObjStrEquals(objList, objStr, locStr, isCB=False):
     for i in range(len(objList)):
         vis = objList[i]['visualization']
-        if str(vis['shape']) in objStr and (isCB or vis['colour'] in objStr) and str(objList[i]['location']) == locStr:
+        if ("'shape': " + str(vis['shape'])) in objStr and (isCB or vis['colour'] in objStr) and str(objList[i]['location']) == locStr:
             return i
     return -1
 
@@ -340,7 +340,7 @@ class Team40Agent(BW4TBrain):
                     self._memberRooms[member] = {'room': removePrefix('Moving to ', newMessages[member]),
                                                  'duration': int(round(self._trustPerMember[member] * 20, 0))}
 
-                # Trustworthy member picked up a block
+                # Trustworthy member dropped a block
                 if 'Dropped goal block' in newMessages[member] and self._trustPerMember[member] >= 0.9:
                     if len(self._activeObjectives) == 0:
                         continue
@@ -872,7 +872,7 @@ class ColorblindAgent(BW4TBrain):
                     self._memberRooms[member] = {'room': removePrefix('Moving to ', newMessages[member]),
                                                  'duration': int(round(self._trustPerMember[member] * 20, 0))}
 
-                # Trustworthy member picked up a block
+                # Trustworthy member dropped a block
                 if 'Dropped goal block' in newMessages[member] and self._trustPerMember[member] >= 0.9:
                     if len(self._activeObjectives) == 0:
                         continue
@@ -1368,7 +1368,7 @@ class StrongAgent(BW4TBrain):
                     self._memberRooms[member] = {'room': removePrefix('Moving to ', newMessages[member]),
                                                  'duration': int(round(self._trustPerMember[member] * 20, 0))}
 
-                # Trustworthy member picked up a block
+                # Trustworthy member dropped a block
                 if 'Dropped goal' in newMessages[member] and self._trustPerMember[member] >= 0.9:
                     if len(self._activeObjectives) == 0:
                         continue
@@ -1464,7 +1464,9 @@ class StrongAgent(BW4TBrain):
 
                 # Carrying priority block (what others are looking for currently) - unique to strong agent
                 if self._prioBlockInd != -1:
-                    self._dropInfo = {'block_id': self._carrying[self._prioBlockInd]['obj_id'], 'location': self._activeGoals[0]['location']}
+                    self._dropInfo = {'block_id': self._carrying[self._prioBlockInd]['obj_id'],
+                                      'location': self._activeGoals[0]['location'],
+                                      'visualization': self._carrying[self._prioBlockInd]['visualization']}
                     self._phase = Phase.PLAN_PATH_TO_DROP_OBJECT
 
                 # Queued to verify other member's drop
@@ -1582,8 +1584,8 @@ class StrongAgent(BW4TBrain):
 
             if Phase.DROP_OBJECT == self._phase:
                 self._phase = Phase.UPDATE_OBJ
-                self._sendMessage('Dropped goal block ' + str(self._carrying[0]['visualization']) +
-                                  ' at location ' + str(self._dropInfo), self._agentName)
+                self._sendMessage('Dropped goal block ' + str(self._dropInfo['visualization']) +
+                                  ' at location ' + str(self._dropInfo['location']), self._agentName)
                 self._activeGoals.pop(0)
                 return DropObject.__name__, {'object_id': self._dropInfo['block_id']}
 
@@ -1646,7 +1648,7 @@ class StrongAgent(BW4TBrain):
                     self._phase = Phase.DECIDE_ACTION
                     return None, {}
                 self._indAO = 0
-                self._indNO = -1
+                indNO = -1
 
                 # Carrying nothing, find any goal block
                 if len(state[self.agent_id]['is_carrying']) == 0:
@@ -1925,7 +1927,7 @@ class LazyAgent(BW4TBrain):
                     self._memberRooms[member] = {'room': removePrefix('Moving to ', newMessages[member]),
                                                  'duration': int(round(self._trustPerMember[member] * 20, 0))}
 
-                # Trustworthy member picked up a block
+                # Trustworthy member dropped a block
                 if 'Dropped goal block' in newMessages[member] and self._trustPerMember[member] >= 0.9:
                     if len(self._activeObjectives) == 0:
                         continue
@@ -2527,7 +2529,7 @@ class LiarAgent(BW4TBrain):
                     self._memberRooms[member] = {'room': removePrefix('Moving to ', newMessages[member]),
                                                  'duration': int(round(self._trustPerMember[member] * 20, 0))}
 
-                # Trustworthy member picked up a block
+                # Trustworthy member dropped a block
                 if 'Dropped goal block' in newMessages[member] and self._trustPerMember[member] >= 0.9:
                     if len(self._activeObjectives) == 0:
                         continue

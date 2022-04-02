@@ -13,9 +13,9 @@ if __name__ == "__main__":
     agents = [
         {'name': 'agent1', 'botclass': Team40Agent, 'settings': {'do_log': True}},
         #{'name': 'agent2', 'botclass': ColorblindAgent, 'settings': {}},
-        #{'name': 'agent3', 'botclass': LiarAgent, 'settings': {}},
-        #{'name': 'agent4', 'botclass': LazyAgent, 'settings': {}},
-        {'name': 'agent5', 'botclass': StrongAgent, 'settings': {'do_log': True}}
+        #{'name': 'agent3', 'botclass': LiarAgent, 'settings': {'do_log': True}},
+        #{'name': 'agent4', 'botclass': LazyAgent, 'settings': {}}
+        {'name': 'agent5', 'botclass': StrongAgent, 'settings': {}}
         ]
 
     print("Started world...")
