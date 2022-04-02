@@ -1153,6 +1153,8 @@ class ColorblindAgent(BW4TBrain):
 
 class StrongAgent(BW4TBrain):
 
+    # We read that when testing, the global carrying capacities for the agents would be set to 2 in decide_on_action()
+
     def __init__(self, settings: Dict[str, object]):
         super().__init__(settings)
         self._agentName = None
