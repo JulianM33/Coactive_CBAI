@@ -136,6 +136,7 @@ def parseTrustAnnouncement(message):
     else:
         return None, None
 
+"""
 class Team40Agent(BW4TBrain):
 
     def __init__(self, settings: Dict[str, object]):
@@ -687,6 +688,7 @@ class Team40Agent(BW4TBrain):
     def _log(self, msg):
         if self._doLog:
             print(self._agentName + ': ' + msg + ' :::  ' + str(self._trustPerMember))
+"""
 
 class ColorblindAgent(BW4TBrain):
 
