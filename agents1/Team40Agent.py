@@ -380,12 +380,11 @@ class Team40Agent(BW4TBrain):
                                               'location': parseLocation(newMessages[member])}
 
     def _announceTrusts(self):
-        if random.randint(0, 1) == 0:
-            for member in self._teamMembers:
-                if self._trustPerMember[member] > 0.9:
-                    self._sendMessage(member + ' is trustworthy', self._agentName)
-                elif self._trustPerMember[member] < 0.1:
-                    self._sendMessage(member + ' is not trustworthy', self._agentName)
+        for member in self._teamMembers:
+            if self._trustPerMember[member] > 0.9:
+                self._sendMessage(member + ' is trustworthy', self._agentName)
+            elif self._trustPerMember[member] < 0.1:
+                self._sendMessage(member + ' is not trustworthy', self._agentName)
 
     def filter_bw4t_observations(self, state):
         return state
@@ -451,7 +450,7 @@ class Team40Agent(BW4TBrain):
             if Phase.DECIDE_ACTION == self._phase:
                 self._carrying = state[self.agent_id]['is_carrying']
 
-                # Announce (un)trustworthy members - built-in 50% chance
+                # Announce (un)trustworthy members
                 self._announceTrusts()
 
                 # Carrying something, go drop it
@@ -933,12 +932,11 @@ class ColorblindAgent(BW4TBrain):
                                               'location': parseLocation(newMessages[member])}
 
     def _announceTrusts(self):
-        if random.randint(0, 1) == 0:
-            for member in self._teamMembers:
-                if self._trustPerMember[member] > 0.9:
-                    self._sendMessage(member + ' is trustworthy', self._agentName)
-                elif self._trustPerMember[member] < 0.1:
-                    self._sendMessage(member + ' is not trustworthy', self._agentName)
+        for member in self._teamMembers:
+            if self._trustPerMember[member] > 0.9:
+                self._sendMessage(member + ' is trustworthy', self._agentName)
+            elif self._trustPerMember[member] < 0.1:
+                self._sendMessage(member + ' is not trustworthy', self._agentName)
 
     def filter_bw4t_observations(self, state):
         return state
@@ -1005,7 +1003,7 @@ class ColorblindAgent(BW4TBrain):
                 # self._carrying = state[self.agent_id]['is_carrying']
                 # the colorblind agent will not carry anything
 
-                # Announce (un)trustworthy members - built-in 50% chance
+                # Announce (un)trustworthy members
                 self._announceTrusts()
 
                 # Queued to verify other member's drop
@@ -1459,12 +1457,11 @@ class StrongAgent(BW4TBrain):
                                               'location': parseLocation(newMessages[member])}
 
     def _announceTrusts(self):
-        if random.randint(0, 1) == 0:
-            for member in self._teamMembers:
-                if self._trustPerMember[member] > 0.9:
-                    self._sendMessage(member + ' is trustworthy', self._agentName)
-                elif self._trustPerMember[member] < 0.1:
-                    self._sendMessage(member + ' is not trustworthy', self._agentName)
+        for member in self._teamMembers:
+            if self._trustPerMember[member] > 0.9:
+                self._sendMessage(member + ' is trustworthy', self._agentName)
+            elif self._trustPerMember[member] < 0.1:
+                self._sendMessage(member + ' is not trustworthy', self._agentName)
 
     def filter_bw4t_observations(self, state):
         return state
@@ -1537,7 +1534,7 @@ class StrongAgent(BW4TBrain):
                 except:
                     pass
 
-                # Announce (un)trustworthy members - built-in 50% chance
+                # Announce (un)trustworthy members
                 self._announceTrusts()
 
                 # Carrying priority block (what others are looking for currently) - unique to strong agent
@@ -2032,12 +2029,11 @@ class LazyAgent(BW4TBrain):
                                               'location': parseLocation(newMessages[member])}
 
     def _announceTrusts(self):
-        if random.randint(0, 1) == 0:
-            for member in self._teamMembers:
-                if self._trustPerMember[member] > 0.9:
-                    self._sendMessage(member + ' is trustworthy', self._agentName)
-                elif self._trustPerMember[member] < 0.1:
-                    self._sendMessage(member + ' is not trustworthy', self._agentName)
+        for member in self._teamMembers:
+            if self._trustPerMember[member] > 0.9:
+                self._sendMessage(member + ' is trustworthy', self._agentName)
+            elif self._trustPerMember[member] < 0.1:
+                self._sendMessage(member + ' is not trustworthy', self._agentName)
 
     def filter_bw4t_observations(self, state):
         return state
@@ -2103,7 +2099,7 @@ class LazyAgent(BW4TBrain):
             if Phase.DECIDE_ACTION == self._phase:
                 self._carrying = state[self.agent_id]['is_carrying']
 
-                # Announce (un)trustworthy members - built-in 50% chance
+                # Announce (un)trustworthy members
                 self._announceTrusts()
 
                 # Carrying something, go drop it
@@ -2655,12 +2651,11 @@ class LiarAgent(BW4TBrain):
                                               'location': parseLocation(newMessages[member])}
 
     def _announceTrusts(self):
-        if random.randint(0, 1) == 0:
-            for member in self._teamMembers:
-                if self._trustPerMember[member] > 0.9:
-                    self._sendMessage(member + ' is trustworthy', self._agentName)
-                elif self._trustPerMember[member] < 0.1:
-                    self._sendMessage(member + ' is not trustworthy', self._agentName)
+        for member in self._teamMembers:
+            if self._trustPerMember[member] > 0.9:
+                self._sendMessage(member + ' is trustworthy', self._agentName)
+            elif self._trustPerMember[member] < 0.1:
+                self._sendMessage(member + ' is not trustworthy', self._agentName)
 
     def filter_bw4t_observations(self, state):
         return state
@@ -2744,7 +2739,7 @@ class LiarAgent(BW4TBrain):
             if Phase.DECIDE_ACTION == self._phase:
                 self._carrying = state[self.agent_id]['is_carrying']
 
-                # Announce (un)trustworthy members - built-in 50% chance
+                # Announce (un)trustworthy members
                 self._announceTrusts()
 
                 # Carrying something, go drop it
