@@ -2313,11 +2313,6 @@ class LazyAgent(BW4TBrain):
                                       + ' at location ' + str(self._searched_obj['location']),
                                       self._agentName)
 
-                    # 50% chance to abandon task - unique to lazy
-                    if random.randint(0, 1) == 0:
-                        self._phase = Phase.EXIT_ROOM
-                        return None, {}
-
                     self._navigator.add_waypoint(self._searched_obj['location'])
                     self._phase = Phase.FOUND_BLOCK
                 else:
