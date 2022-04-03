@@ -123,6 +123,19 @@ def readCsv(filename):
         res[d[0]] = d[1]
     return res
 
+def parseTrustAnnouncement(message):
+    # returns None or (name of member, True-trustWorthy/False-notTrustWorthy)
+    if ' is not trustworthy' in message:
+        ind = message.index(' is not trustworthy')
+        memberName = message[:ind]
+        return memberName, False
+    elif ' is trustworthy' in message:
+        ind = message.index(' is trustworthy')
+        memberName = message[:ind]
+        return memberName, True
+    else:
+        return None, None
+
 class Team40Agent(BW4TBrain):
 
     def __init__(self, settings: Dict[str, object]):
@@ -218,6 +231,16 @@ class Team40Agent(BW4TBrain):
             message = newestMsg[member]
             if message is None:
                 continue
+
+            # Update other members' beliefs if sender is trustworthy
+            if self._trustPerMember[member] > 0.9:
+                memberName, trustStatus = parseTrustAnnouncement(message)
+                if memberName is not None and memberName != self._agentName and trustStatus:
+                    self._updateTrustBy(memberName, 0.3)
+                    self._log('increasing ' + memberName + '\'s trust score')
+                if memberName is not None and memberName != self._agentName and not trustStatus:
+                    self._updateTrustBy(memberName, -0.3)
+                    self._log('decreasing ' + memberName + '\'s trust score')
 
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
@@ -356,6 +379,14 @@ class Team40Agent(BW4TBrain):
                     self._verifyMemberDrop = {'name': member, 'visualization': parseBlockVisual(newMessages[member]),
                                               'location': parseLocation(newMessages[member])}
 
+    def _announceTrusts(self):
+        if random.randint(0, 1) == 0:
+            for member in self._teamMembers:
+                if self._trustPerMember[member] > 0.9:
+                    self._sendMessage(member + ' is trustworthy', self._agentName)
+                elif self._trustPerMember[member] < 0.1:
+                    self._sendMessage(member + ' is not trustworthy', self._agentName)
+
     def filter_bw4t_observations(self, state):
         return state
 
@@ -419,6 +450,9 @@ class Team40Agent(BW4TBrain):
         while True:
             if Phase.DECIDE_ACTION == self._phase:
                 self._carrying = state[self.agent_id]['is_carrying']
+
+                # Announce (un)trustworthy members - built-in 50% chance
+                self._announceTrusts()
 
                 # Carrying something, go drop it
                 if len(self._carrying) != 0:
@@ -751,6 +785,16 @@ class ColorblindAgent(BW4TBrain):
             if message is None:
                 continue
 
+            # Update other members' beliefs if sender is trustworthy
+            if self._trustPerMember[member] > 0.9:
+                memberName, trustStatus = parseTrustAnnouncement(message)
+                if memberName is not None and memberName != self._agentName and trustStatus:
+                    self._updateTrustBy(memberName, 0.3)
+                    self._log('increasing ' + memberName + '\'s trust score')
+                if memberName is not None and memberName != self._agentName and not trustStatus:
+                    self._updateTrustBy(memberName, -0.3)
+                    self._log('decreasing ' + memberName + '\'s trust score')
+
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
                 self._updateTrustBy(member, -0.15)
@@ -888,6 +932,14 @@ class ColorblindAgent(BW4TBrain):
                     self._verifyMemberDrop = {'name': member, 'visualization': parseBlockVisual(newMessages[member]),
                                               'location': parseLocation(newMessages[member])}
 
+    def _announceTrusts(self):
+        if random.randint(0, 1) == 0:
+            for member in self._teamMembers:
+                if self._trustPerMember[member] > 0.9:
+                    self._sendMessage(member + ' is trustworthy', self._agentName)
+                elif self._trustPerMember[member] < 0.1:
+                    self._sendMessage(member + ' is not trustworthy', self._agentName)
+
     def filter_bw4t_observations(self, state):
         return state
 
@@ -952,6 +1004,9 @@ class ColorblindAgent(BW4TBrain):
             if Phase.DECIDE_ACTION == self._phase:
                 # self._carrying = state[self.agent_id]['is_carrying']
                 # the colorblind agent will not carry anything
+
+                # Announce (un)trustworthy members - built-in 50% chance
+                self._announceTrusts()
 
                 # Queued to verify other member's drop
                 if self._verifyMemberDrop is not None:
@@ -1249,6 +1304,16 @@ class StrongAgent(BW4TBrain):
             if message is None:
                 continue
 
+            # Update other members' beliefs if sender is trustworthy
+            if self._trustPerMember[member] > 0.9:
+                memberName, trustStatus = parseTrustAnnouncement(message)
+                if memberName is not None and memberName != self._agentName and trustStatus:
+                    self._updateTrustBy(memberName, 0.3)
+                    self._log('increasing ' + memberName + '\'s trust score')
+                if memberName is not None and memberName != self._agentName and not trustStatus:
+                    self._updateTrustBy(memberName, -0.3)
+                    self._log('decreasing ' + memberName + '\'s trust score')
+
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
                 self._updateTrustBy(member, -0.15)
@@ -1393,6 +1458,14 @@ class StrongAgent(BW4TBrain):
                     self._verifyMemberDrop = {'name': member, 'visualization': parseBlockVisual(newMessages[member]),
                                               'location': parseLocation(newMessages[member])}
 
+    def _announceTrusts(self):
+        if random.randint(0, 1) == 0:
+            for member in self._teamMembers:
+                if self._trustPerMember[member] > 0.9:
+                    self._sendMessage(member + ' is trustworthy', self._agentName)
+                elif self._trustPerMember[member] < 0.1:
+                    self._sendMessage(member + ' is not trustworthy', self._agentName)
+
     def filter_bw4t_observations(self, state):
         return state
 
@@ -1463,6 +1536,9 @@ class StrongAgent(BW4TBrain):
                     self._prioBlockInd = indexObjEquals(self._carrying, self._activeGoals[0])
                 except:
                     pass
+
+                # Announce (un)trustworthy members - built-in 50% chance
+                self._announceTrusts()
 
                 # Carrying priority block (what others are looking for currently) - unique to strong agent
                 if self._prioBlockInd != -1:
@@ -1808,6 +1884,16 @@ class LazyAgent(BW4TBrain):
             if message is None:
                 continue
 
+            # Update other members' beliefs if sender is trustworthy
+            if self._trustPerMember[member] > 0.9:
+                memberName, trustStatus = parseTrustAnnouncement(message)
+                if memberName is not None and memberName != self._agentName and trustStatus:
+                    self._updateTrustBy(memberName, 0.3)
+                    self._log('increasing ' + memberName + '\'s trust score')
+                if memberName is not None and memberName != self._agentName and not trustStatus:
+                    self._updateTrustBy(memberName, -0.3)
+                    self._log('decreasing ' + memberName + '\'s trust score')
+
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
                 self._updateTrustBy(member, -0.15)
@@ -1945,6 +2031,14 @@ class LazyAgent(BW4TBrain):
                     self._verifyMemberDrop = {'name': member, 'visualization': parseBlockVisual(newMessages[member]),
                                               'location': parseLocation(newMessages[member])}
 
+    def _announceTrusts(self):
+        if random.randint(0, 1) == 0:
+            for member in self._teamMembers:
+                if self._trustPerMember[member] > 0.9:
+                    self._sendMessage(member + ' is trustworthy', self._agentName)
+                elif self._trustPerMember[member] < 0.1:
+                    self._sendMessage(member + ' is not trustworthy', self._agentName)
+
     def filter_bw4t_observations(self, state):
         return state
 
@@ -2008,6 +2102,9 @@ class LazyAgent(BW4TBrain):
         while True:
             if Phase.DECIDE_ACTION == self._phase:
                 self._carrying = state[self.agent_id]['is_carrying']
+
+                # Announce (un)trustworthy members - built-in 50% chance
+                self._announceTrusts()
 
                 # Carrying something, go drop it
                 if len(self._carrying) != 0:
@@ -2410,6 +2507,16 @@ class LiarAgent(BW4TBrain):
             if message is None:
                 continue
 
+            # Update other members' beliefs if sender is trustworthy
+            if self._trustPerMember[member] > 0.9:
+                memberName, trustStatus = parseTrustAnnouncement(message)
+                if memberName is not None and memberName != self._agentName and trustStatus:
+                    self._updateTrustBy(memberName, 0.3)
+                    self._log('increasing ' + memberName + '\'s trust score')
+                if memberName is not None and memberName != self._agentName and not trustStatus:
+                    self._updateTrustBy(memberName, -0.3)
+                    self._log('decreasing ' + memberName + '\'s trust score')
+
             # Colorblind agent
             if ('Found' in message or 'Picking' in message or 'Dropped' in message) and 'colour' not in message:
                 self._updateTrustBy(member, -0.15)
@@ -2547,6 +2654,14 @@ class LiarAgent(BW4TBrain):
                     self._verifyMemberDrop = {'name': member, 'visualization': parseBlockVisual(newMessages[member]),
                                               'location': parseLocation(newMessages[member])}
 
+    def _announceTrusts(self):
+        if random.randint(0, 1) == 0:
+            for member in self._teamMembers:
+                if self._trustPerMember[member] > 0.9:
+                    self._sendMessage(member + ' is trustworthy', self._agentName)
+                elif self._trustPerMember[member] < 0.1:
+                    self._sendMessage(member + ' is not trustworthy', self._agentName)
+
     def filter_bw4t_observations(self, state):
         return state
 
@@ -2628,6 +2743,9 @@ class LiarAgent(BW4TBrain):
         while True:
             if Phase.DECIDE_ACTION == self._phase:
                 self._carrying = state[self.agent_id]['is_carrying']
+
+                # Announce (un)trustworthy members - built-in 50% chance
+                self._announceTrusts()
 
                 # Carrying something, go drop it
                 if len(self._carrying) != 0:
